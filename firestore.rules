@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Custom claim — set server-side:
+    // admin.auth().setCustomUserClaims(uid, { role: "admin" })
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == "admin";
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ── users ─────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read:   if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      // Users may update only non-loyalty profile fields.
+      // All loyalty fields are exclusively written by backend service logic.
+      allow update: if (isOwner(userId) &&
+                        !request.resource.data.diff(resource.data)
+                          .affectedKeys()
+                          .hasAny([
+                            'loyaltyPoints', 'totalCoinsEarned',
+                            'annualOmniaValue', 'lifetimeOmniaValue',
+                            'annualResetDate', 'tier', 'tierUpdatedAt',
+                            'tierOverriddenByAdmin', 'role', 'travelFamily',
+                            'travelFamilyAssignedAt'
+                          ]))
+                    || isAdmin();
+      allow delete: if isAdmin();
+
+      // coinsHistory — users read-only; backend writes
+      // Entries are never deleted — only status is updated.
+      match /coinsHistory/{txId} {
+        allow read:   if isOwner(userId) || isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if false;
+      }
+
+      // tierHistory — append-only log of tier changes
+      match /tierHistory/{entryId} {
+        allow read:   if isOwner(userId) || isAdmin();
+        allow create: if isAdmin();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // ── packages ──────────────────────────────────────────────────────────
+
+    match /packages/{packageId} {
+      allow read:   if resource.data.status == "published" || isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── tours ─────────────────────────────────────────────────────────────
+
+    match /tours/{tourId} {
+      allow read:   if resource.data.status == "published" || isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── bookings ──────────────────────────────────────────────────────────
+    // Users create their own bookings; loyalty fields must not be set by client.
+    // Admins own all update/delete rights.
+
+    match /bookings/{bookingId} {
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && !request.resource.data.keys()
+                         .hasAny(['coinsStatus', 'coinsEarned',
+                                  'omniaServiceValue']);
+      allow read:   if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── referrals ─────────────────────────────────────────────────────────
+    // Written by backend after referred client completes travel.
+    // Immutable once created (idempotency guard).
+
+    match /referrals/{referralId} {
+      allow read:   if isAuthenticated()
+                      && (resource.data.referrerId == request.auth.uid || isAdmin());
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── auditLogs ─────────────────────────────────────────────────────────
+    // Append-only. Never updated or deleted.
+
+    match /auditLogs/{logId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── subscribers ───────────────────────────────────────────────────────
+
+    match /subscribers/{subscriberId} {
+      allow create: if true;
+      allow read:   if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── newsletters ───────────────────────────────────────────────────────
+
+    match /newsletters/{newsletterId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── news ──────────────────────────────────────────────────────────────
+
+    match /news/{newsId} {
+      allow read:   if resource.data.status == "published" || isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── rewards (legacy flat collection) ──────────────────────────────────
+
+    match /rewards/{rewardId} {
+      allow read:   if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+  }
+}

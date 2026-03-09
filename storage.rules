@@ -1,0 +1,92 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Matches custom claim set via: admin.auth().setCustomUserClaims(uid, { role: "admin" })
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == "admin";
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/jpeg')
+          || request.resource.contentType.matches('image/png')
+          || request.resource.contentType.matches('image/webp')
+          || request.resource.contentType.matches('image/avif');
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/mp4')
+          || request.resource.contentType.matches('video/webm')
+          || request.resource.contentType.matches('video/quicktime');
+    }
+
+    // ── packages/{packageId}/featured-image ───────────────────────────────
+    match /packages/{packageId}/featured-image {
+      allow read:   if true;
+      allow write:  if isAdmin() && isImage()
+                    && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── packages/{packageId}/gallery/{imageName} ──────────────────────────
+    match /packages/{packageId}/gallery/{imageName} {
+      allow read:   if true;
+      allow write:  if isAdmin() && isImage()
+                    && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── packages/{packageId}/video/{videoName} ────────────────────────────
+    match /packages/{packageId}/video/{videoName} {
+      allow read:   if true;
+      allow write:  if isAdmin() && isVideo()
+                    && request.resource.size <= 500 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── tours/{tourId}/featured-image ─────────────────────────────────────
+    match /tours/{tourId}/featured-image {
+      allow read:   if true;
+      allow write:  if isAdmin() && isImage()
+                    && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── tours/{tourId}/gallery/{imageName} ────────────────────────────────
+    match /tours/{tourId}/gallery/{imageName} {
+      allow read:   if true;
+      allow write:  if isAdmin() && isImage()
+                    && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── tours/{tourId}/video/{videoName} ──────────────────────────────────
+    match /tours/{tourId}/video/{videoName} {
+      allow read:   if true;
+      allow write:  if isAdmin() && isVideo()
+                    && request.resource.size <= 500 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── news/{newsId}/images/{imageName} ──────────────────────────────────
+    match /news/{newsId}/images/{imageName} {
+      allow read:   if true;
+      allow write:  if isAdmin() && isImage()
+                    && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    // ── Catch-all: deny everything else ───────────────────────────────────
+    match /{allPaths=**} {
+      allow read:   if false;
+      allow write:  if false;
+    }
+
+  }
+}
