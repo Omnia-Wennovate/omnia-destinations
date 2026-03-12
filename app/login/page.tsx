@@ -16,8 +16,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 
+<<<<<<< HEAD
 import { sendPasswordResetEmail } from "firebase/auth"
 
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
 
 export default function LoginPage() {
   const router = useRouter()
@@ -81,6 +84,7 @@ export default function LoginPage() {
     }
   }
 
+<<<<<<< HEAD
 const [showForgot, setShowForgot] = useState(false)
 const [resetEmail, setResetEmail] = useState("")
 const [resetMessage, setResetMessage] = useState<string | null>(null)
@@ -107,6 +111,8 @@ const handleResetPassword = async () => {
   }
 }
 
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
 const onSubmit = async (data: LoginFormData) => {
   try {
     setLoading(true)
@@ -262,6 +268,7 @@ const onSubmit = async (data: LoginFormData) => {
                   Remember me
                 </Label>
               </div>
+<<<<<<< HEAD
               <button
   type="button"
   onClick={() => setShowForgot(true)}
@@ -269,6 +276,14 @@ const onSubmit = async (data: LoginFormData) => {
 >
   Forgot Password?
 </button>
+=======
+              <Link
+                href="/forgot-password"
+                className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+              >
+                Forgot Password?
+              </Link>
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
             </div>
 
             {/* Error Message */}
@@ -383,6 +398,7 @@ const onSubmit = async (data: LoginFormData) => {
           </div>
         </div>
       </div>
+<<<<<<< HEAD
       {showForgot && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div className="bg-white dark:bg-gray-900 p-6 rounded-xl w-full max-w-md space-y-4">
@@ -419,6 +435,8 @@ const onSubmit = async (data: LoginFormData) => {
     </div>
   </div>
 )}
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
     </div>
   )
 }

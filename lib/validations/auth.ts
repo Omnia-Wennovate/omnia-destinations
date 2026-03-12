@@ -12,6 +12,7 @@ export const signupSchema = z
     lastName: z.string().min(2, 'Last name must be at least 2 characters'),
     email: z.string().email('Invalid email address'),
     phone: z.string().optional(),
+<<<<<<< HEAD
 password: z
   .string()
   .min(8, "Password must be at least 8 characters")
@@ -19,6 +20,9 @@ password: z
   .regex(/[a-z]/, "Must contain at least one lowercase letter")
   .regex(/[0-9]/, "Must contain at least one number")
   .regex(/[^A-Za-z0-9]/, "Must contain at least one special character"),
+=======
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
     confirmPassword: z.string(),
     agreeTerms: z.boolean().refine((val) => val === true, {
       message: 'You must agree to the terms',

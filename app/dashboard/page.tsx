@@ -132,7 +132,11 @@ export default function DashboardPage() {
 
           // Fetch bookings using the service
         try {
+<<<<<<< HEAD
   const firestoreBookings = await getUserBookings(user!.id)
+=======
+  const firestoreBookings = await getUserBookings(userId)
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
 
   const bookingsList: Booking[] = firestoreBookings.map((b) => ({
     id: b.id,

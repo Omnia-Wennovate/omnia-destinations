@@ -157,7 +157,11 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
       const data = doc.data();
       bookings.push({
         id: doc.id,
+<<<<<<< HEAD
         userId: data.userId || "",
+=======
+        userId: data.userId || user.id || "",
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
         userName: data.userName || "Unknown User",
         userEmail: data.userEmail || "",
         packageId: data.packageId || data.tourId || "",

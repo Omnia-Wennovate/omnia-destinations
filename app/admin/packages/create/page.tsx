@@ -72,10 +72,13 @@ export default function CreatePackagePage() {
   const [duration, setDuration] = useState('')
   const [location, setLocation] = useState('')
   const [category, setCategory] = useState('')
+<<<<<<< HEAD
 
   const [availableFrom, setAvailableFrom] = useState('')
 const [availableUntil, setAvailableUntil] = useState('')
 
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
   const [includedServices, setIncludedServices] = useState<string[]>([''])
   const [excludedServices, setExcludedServices] = useState<string[]>([''])
 
@@ -112,6 +115,7 @@ const [availableUntil, setAvailableUntil] = useState('')
         // Update existing draft
         const { updatePackage } = await import('@/lib/services/packages.service')
         await updatePackage(packageId, {
+<<<<<<< HEAD
   title,
   slug,
   shortDescription,
@@ -143,6 +147,35 @@ const [availableUntil, setAvailableUntil] = useState('')
   excludedServices: excludedServices.filter(Boolean),
   status: 'draft',
 })
+=======
+          title,
+          slug,
+          shortDescription,
+          fullDescription: fullDescription || '',
+          price: parseFloat(price) || 0,
+          duration: parseInt(duration) || 0,
+          location,
+          category,
+          includedServices: includedServices.filter(Boolean),
+          excludedServices: excludedServices.filter(Boolean),
+          status: 'draft',
+        })
+      } else {
+        // Create new draft
+        const id = await createPackage({
+          title,
+          slug,
+          shortDescription,
+          fullDescription,
+          price: parseFloat(price) || 0,
+          duration: parseInt(duration) || 0,
+          location,
+          category,
+          includedServices: includedServices.filter(Boolean),
+          excludedServices: excludedServices.filter(Boolean),
+          status: 'draft',
+        })
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
         setPackageId(id)
       }
     } catch (err: any) {
@@ -640,6 +673,7 @@ const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 />
               </div>
 
+<<<<<<< HEAD
 <div className="space-y-2">
   <Label htmlFor="availableFrom">Available From *</Label>
   <Input
@@ -660,6 +694,8 @@ const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   />
 </div>
 
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
                 <Select value={category} onValueChange={setCategory}>

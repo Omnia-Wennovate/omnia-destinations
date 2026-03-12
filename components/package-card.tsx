@@ -17,7 +17,10 @@ interface PackageCardProps {
 
 export function PackageCard({ package: pkg }: PackageCardProps) {
   if (!pkg) return null
+<<<<<<< HEAD
 
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
   const { id, title, location, image, duration, price, rating } = pkg
 
   return (

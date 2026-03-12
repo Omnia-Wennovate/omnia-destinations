@@ -70,7 +70,11 @@ useEffect(() => {
 
   // Combine Firestore packages with static fallback data
 const allPackages = useMemo(() => {
+<<<<<<< HEAD
 const firestoreConverted = firestorePackages.map((pkg) => ({
+=======
+  const firestoreConverted = firestorePackages.map((pkg) => ({
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
   id: pkg.slug || pkg.id,
   title: pkg.title,
   location: pkg.location,
@@ -78,8 +82,11 @@ const firestoreConverted = firestorePackages.map((pkg) => ({
   duration: `${pkg.duration} Days`,
   price: Number(pkg.price),
   rating: 4.5,
+<<<<<<< HEAD
   availableFrom: pkg.availableFrom,
   availableTo: pkg.availableTo,
+=======
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
 }))
 
   if (firestoreConverted.length > 0) {
@@ -98,6 +105,7 @@ const firestoreConverted = firestorePackages.map((pkg) => ({
 }, [firestorePackages])
 
   // Filter and sort packages
+<<<<<<< HEAD
  const filteredPackages = useMemo(() => {
   let results = [...allPackages]
 
@@ -109,6 +117,10 @@ const firestoreConverted = firestorePackages.map((pkg) => ({
     const endDate = new Date(pkg.availableTo)
     return endDate >= today
   })
+=======
+  const filteredPackages = useMemo(() => {
+    let results = [...allPackages]
+>>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
 
     // Filter by keywords
     if (keywords) {
