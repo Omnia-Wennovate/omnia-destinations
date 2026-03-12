@@ -145,7 +145,6 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
   const { collection, query, orderBy, getDocs } = modules.firestore;
 
   try {
-    // Fetch bookings
     const bookingsQuery = query(
       collection(db, "bookings"),
       orderBy("createdAt", "desc")
@@ -157,11 +156,7 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
       const data = doc.data();
       bookings.push({
         id: doc.id,
-<<<<<<< HEAD
         userId: data.userId || "",
-=======
-        userId: data.userId || user.id || "",
->>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
         userName: data.userName || "Unknown User",
         userEmail: data.userEmail || "",
         packageId: data.packageId || data.tourId || "",
@@ -219,11 +214,10 @@ export async function cancelBooking(bookingId: string): Promise<void> {
     updatedAt: serverTimestamp(),
   });
 
-  // Reverse coins if previously awarded
   await reverseBookingCoins(bookingId);
 }
 
-// Mark booking as refunded (admin) — reverses any awarded coins
+// Mark booking as refunded (admin)
 export async function markAsRefunded(
   bookingId: string,
   refundNote: string
@@ -243,11 +237,10 @@ export async function markAsRefunded(
     updatedAt: serverTimestamp(),
   });
 
-  // Reverse coins if previously awarded
   await reverseBookingCoins(bookingId);
 }
 
-// Update booking status (admin) — triggers loyalty coin award when completed
+// Update booking status (admin)
 export async function updateBookingStatus(
   bookingId: string,
   bookingStatus: "confirmed" | "pending" | "cancelled" | "completed"
@@ -266,16 +259,14 @@ export async function updateBookingStatus(
     updatedAt: serverTimestamp(),
   });
 
-  // Trigger loyalty logic based on new status
   if (bookingStatus === "completed") {
-    // awardBookingCoins checks paymentStatus === "paid" internally
     await awardBookingCoins(bookingId);
   } else if (bookingStatus === "cancelled") {
     await reverseBookingCoins(bookingId);
   }
 }
 
-// Update payment status (admin) — triggers loyalty coin award when paid + completed
+// Update payment status (admin)
 export async function updatePaymentStatus(
   bookingId: string,
   paymentStatus: "paid" | "pending" | "refunded" | "failed"
@@ -294,7 +285,6 @@ export async function updatePaymentStatus(
     updatedAt: serverTimestamp(),
   });
 
-  // If payment is confirmed and booking is already completed, award coins
   if (paymentStatus === "paid") {
     await awardBookingCoins(bookingId);
   } else if (paymentStatus === "refunded") {

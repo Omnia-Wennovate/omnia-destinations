@@ -8,11 +8,8 @@ import { Footer } from '@/components/footer'
 import { ScrollToTop } from '@/components/scroll-to-top'
 import { WhatsAppFloat } from '@/components/whatsapp-float'
 import { OmniaChatbot } from '@/components/omnia-chatbot'
-import './globals.css'
-<<<<<<< HEAD
 import AutoLogout from '@/components/auto-logout'
-=======
->>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
+import './globals.css'
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -20,7 +17,7 @@ const poppins = Poppins({
   variable: '--font-poppins',
 })
 
-const lato = { variable: '--font-lato' } // Declaring the lato variable
+const lato = { variable: '--font-lato' }
 
 export const metadata: Metadata = {
   title: 'OMNIA - Business and Leisure Travel',
@@ -44,10 +41,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="light">
       <body className={`${poppins.variable} font-sans antialiased bg-background text-foreground`}>
         <Providers>
-<<<<<<< HEAD
-        <AutoLogout />
-=======
->>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381
+          <AutoLogout />
           <div className="flex min-h-screen flex-col">
             <Header />
             <main className="flex-1">{children}</main>
