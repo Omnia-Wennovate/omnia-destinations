@@ -10,6 +10,8 @@ export interface PackageData {
   duration: number;
   location: string;
   category: string;
+  availableFrom?: string;
+  availableUntil?: string;
   includedServices: string[];
   excludedServices: string[];
   status: "draft" | "published";
@@ -21,6 +23,7 @@ export interface PackageData {
 }
 
 export interface PackageListItem {
+  images: any;
   id: string;
   title: string;
   slug?: string;
@@ -30,6 +33,8 @@ export interface PackageListItem {
   featuredImageURL?: string;
   location: string;
   category: string;
+  availableFrom?: string;
+  availableUntil?: string;
 }
 
 export interface CreatePackageData {
@@ -41,6 +46,8 @@ export interface CreatePackageData {
   duration: number;
   location: string;
   category: string;
+  availableFrom?: string;
+  availableUntil?: string;
   includedServices: string[];
   excludedServices: string[];
   status: "draft" | "published";
@@ -163,19 +170,19 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
   const { collection, query, where, orderBy, getDocs } = modules.firestore;
 
   try {
-   const snap = await getDocs(
-  query(
-    collection(db, "packages"),
-    where("status", "==", "published"),
-    orderBy("createdAt", "desc")
-  )
-);
+    const snap = await getDocs(
+      query(
+        collection(db, "packages"),
+        where("status", "==", "published"),
+        orderBy("createdAt", "desc")
+      )
+    );
 
-console.log("🔥 Firestore snapshot:", snap.docs);
+    console.log("🔥 Firestore snapshot:", snap.docs);
 
-snap.docs.forEach((doc) => {
-  console.log("📦 Package:", doc.id, doc.data());
-});
+    snap.docs.forEach((doc) => {
+      console.log("📦 Package:", doc.id, doc.data());
+    });
     return snap.docs.map((d: any) => {
       const data = d.data();
       return {
@@ -188,6 +195,8 @@ snap.docs.forEach((doc) => {
         featuredImageURL: data.featuredImageURL,
         location: data.location,
         category: data.category,
+        availableFrom: data.availableFrom,
+        availableUntil: data.availableUntil,
       } as PackageListItem;
     });
   } catch (error: any) {

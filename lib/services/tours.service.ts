@@ -1,60 +1,3 @@
-<<<<<<< HEAD
-import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config"
-
-export interface Tour {
-  id: string
-  city: string
-  country: string
-  description: string
-  price: number
-  startDate: string
-  expireDate: string
-  maxGuests: number
-  itinerary: string
-  priceIncludes: string[]
-  priceExcludes: string[]
-  slug: string
-}
-
-export async function getAllTours(): Promise<Tour[]> {
-  const db = await getFirebaseDb()
-  const modules = await getFirebaseModules()
-
-  if (!db || !modules.firestore) return []
-
-  const { collection, getDocs } = modules.firestore
-
-  try {
-    const snapshot = await getDocs(collection(db, "tours"))
-
-    const tours: Tour[] = []
-
-    snapshot.forEach((doc: any) => {
-      const data = doc.data()
-
-      tours.push({
-        id: doc.id,
-        city: data.city || "",
-        country: data.country || "",
-        description: data.description || "",
-        price: data.price || 0,
-        startDate: data.startDate || "",
-        expireDate: data.expireDate || "",
-        maxGuests: data.maxGuests || 0,
-        itinerary: data.itinerary || "",
-        priceIncludes: data.priceIncludes || [],
-        priceExcludes: data.priceExcludes || [],
-        slug: data.slug || ""
-      })
-    })
-
-    return tours
-  } catch (error) {
-    console.error("Error loading tours:", error)
-    return []
-  }
-}
-=======
 import {
   collection,
   getDocs,
@@ -106,14 +49,19 @@ export async function getToursFromFirestore(): Promise<FirestoreTour[]> {
 
     return tours;
   } catch (error: any) {
-    const msg = error?.message || ''
-    const code = error?.code || ''
-    
-    if (msg.includes('insufficient permissions') || msg.includes('permission-denied') || code === 'permission-denied' || msg.includes('does not exist')) {
-      return []
+    const msg = error?.message || '';
+    const code = error?.code || '';
+
+    if (
+      msg.includes('insufficient permissions') ||
+      msg.includes('permission-denied') ||
+      code === 'permission-denied' ||
+      msg.includes('does not exist')
+    ) {
+      return [];
     }
-    
-    return []
+
+    return [];
   }
 }
 
@@ -183,7 +131,7 @@ export interface CreateTourData {
 
 export async function createTour(data: CreateTourData, adminId: string): Promise<string> {
   const toursRef = collection(db, "tours");
-  
+
   const tagsList: string[] = [];
   if (data.tags.isTopDestination) tagsList.push("top");
   if (data.tags.isNew) tagsList.push("new");
@@ -211,4 +159,3 @@ export async function createTour(data: CreateTourData, adminId: string): Promise
 
   return docRef.id;
 }
->>>>>>> 4c57566027f0d79a8001fe43943a3fa318651381

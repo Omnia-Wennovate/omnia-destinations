@@ -76,7 +76,7 @@ export default function PackagesPage() {
       price: Number(pkg.price),
       rating: 4.5,
       availableFrom: pkg.availableFrom,
-      availableTo: pkg.availableTo,
+      availableUntil: pkg.availableUntil,
     }))
 
     if (firestoreConverted.length > 0) {
@@ -102,8 +102,9 @@ export default function PackagesPage() {
 
     // Remove expired packages
     results = results.filter((pkg: any) => {
-      if (!pkg.availableTo) return true
-      const endDate = new Date(pkg.availableTo)
+      const untilDate = pkg.availableUntil || pkg.availableTo
+      if (!untilDate) return true
+      const endDate = new Date(untilDate)
       return endDate >= today
     })
 

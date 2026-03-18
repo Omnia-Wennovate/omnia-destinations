@@ -294,11 +294,10 @@ export default function AdminToursPage() {
             <button
               key={item.key}
               onClick={() => setStatusFilter(item.key)}
-              className={`p-4 rounded-xl border text-left transition-all ${
-                statusFilter === item.key
+              className={`p-4 rounded-xl border text-left transition-all ${statusFilter === item.key
                   ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                   : "border-border bg-card hover:border-primary/30"
-              }`}
+                }`}
             >
               <p className="text-sm text-muted-foreground">{item.label}</p>
               <p className={`text-2xl font-bold ${item.color}`}>
@@ -440,7 +439,7 @@ export default function AdminToursPage() {
                         <TableCell>
                           <div className="flex items-center gap-1 flex-wrap">
                             {tour.tags.length > 0 ? (
-                              tour.tags.map((tag) => getTagBadge(tag))
+                              tour.tags.map((tag: string) => getTagBadge(tag))
                             ) : (
                               <span className="text-xs text-muted-foreground">
                                 --
@@ -530,9 +529,9 @@ export default function AdminToursPage() {
                   $
                   {filteredTours.length > 0
                     ? Math.round(
-                        filteredTours.reduce((sum, t) => sum + t.price, 0) /
-                          filteredTours.length
-                      ).toLocaleString()
+                      filteredTours.reduce((sum, t) => sum + t.price, 0) /
+                      filteredTours.length
+                    ).toLocaleString()
                     : 0}
                 </strong>
               </span>

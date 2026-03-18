@@ -1,5 +1,5 @@
 'use client'
-
+import { z } from 'zod'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -71,6 +71,7 @@ export default function SignupPage() {
     formState: { errors, isSubmitting },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
+
   })
 
   const password = watch('password')
@@ -93,82 +94,126 @@ export default function SignupPage() {
     return code
   }
 
-  const onSubmit = async (data: SignupFormData) => {
-    console.log('[v0] Signup form submitted with data:', { email: data.email, firstName: data.firstName, lastName: data.lastName })
-    try {
-      setLoading(true)
-      setError(null)
-      setFormError(null)
+const onSubmit = async (data: SignupFormData) => {
+  try {
+    setLoading(true)
+    setError(null)
+    setFormError(null)
 
-      // Create Firebase Auth user
-      const auth = await getFirebaseAuth()
-      const modules = await getFirebaseModules()
-      if (!auth || !modules.auth) {
-        setFormError('Authentication service not available. Please try again later.')
-        return
-      }
-      const { createUserWithEmailAndPassword, updateProfile } = modules.auth
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password)
-      const firebaseUser = userCredential.user
-      if (!firebaseUser) {
-        setFormError('Signup failed. Please try again.')
-        return
-      }
+    const auth = await getFirebaseAuth()
+    const modules = await getFirebaseModules()
 
-      // Update display name
-      const fullName = `${data.firstName} ${data.lastName}`
-      await updateProfile(firebaseUser, { displayName: fullName })
-
-      // Create Firestore user document
-      const db = await getFirebaseDb()
-      if (!db || !modules.firestore) {
-        setFormError('Database service not available. Please try again later.')
-        return
-      }
-      const { doc, setDoc, serverTimestamp } = modules.firestore
-      await setDoc(doc(db, 'users', firebaseUser.uid), {
-        name: fullName,
-        email: data.email,
-        phone: data.phone || '',
-        role: 'USER',
-        loyaltyPoints: 0,
-        referralCode: generateReferralCode(),
-        totalReferrals: 0,
-        createdAt: serverTimestamp(),
-      })
-      console.log('[v0] Firestore document created')
-
-      // Set user in store
-      setUser({
-        id: firebaseUser.uid,
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone,
-        role: 'USER',
-      })
-
-      console.log('[v0] Redirecting to dashboard...')
-      // Redirect to dashboard
-      router.push('/dashboard')
-    } catch (error: any) {
-      console.log('[v0] Signup error:', error?.code, error?.message, error)
-      const code = error?.code || ''
-      let message = 'Signup failed. Please try again.'
-      if (code === 'auth/email-already-in-use') {
-        message = 'This email is already registered. Please sign in instead.'
-      } else if (code === 'auth/weak-password') {
-        message = 'Password is too weak. Please use at least 6 characters.'
-      } else if (code === 'auth/invalid-email') {
-        message = 'Invalid email address.'
-      }
-      setFormError(message)
-      setError(message)
-    } finally {
-      setLoading(false)
+    if (!auth || !modules.auth) {
+      setFormError('Authentication service not available.')
+      router.push('/login')
+      return
     }
-  }
 
+    const {
+      createUserWithEmailAndPassword,
+      updateProfile,
+      signOut,
+    } = modules.auth
+
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      data.email,
+      data.password
+    )
+
+    const firebaseUser = userCredential.user
+
+    if (!firebaseUser) {
+      setFormError('Signup failed.')
+      router.push('/login')
+      return
+    }
+
+    const fullName = `${data.firstName} ${data.lastName}`
+
+    await updateProfile(firebaseUser, {
+      displayName: fullName,
+    })
+
+    const db = await getFirebaseDb()
+
+    if (!db || !modules.firestore) {
+      try {
+        await firebaseUser.delete()
+      } catch {
+        console.log('Delete skipped')
+      }
+
+      setFormError('Database unavailable.')
+      router.push('/login')
+      return
+    }
+
+    const firestore = modules.firestore
+
+    const {
+      doc,
+      setDoc,
+      serverTimestamp,
+      collection,
+      query,
+      where,
+      getDocs,
+      updateDoc,
+      increment,
+    } = firestore
+
+    const myReferralCode = generateReferralCode()
+    const usedCode = data.referralCodeUsed?.trim().toUpperCase() || ''
+
+    let validReferralCode = ''
+
+    if (usedCode) {
+      const q = query(
+        collection(db, 'users'),
+        where('referralCode', '==', usedCode)
+      )
+
+      const snapshot = await getDocs(q)
+
+      if (!snapshot.empty) {
+        const referrerDoc = snapshot.docs[0]
+
+        await updateDoc(referrerDoc.ref, {
+          totalReferrals: increment(1),
+        })
+
+        validReferralCode = usedCode
+      }
+    }
+
+    await setDoc(doc(db, 'users', firebaseUser.uid), {
+      name: fullName,
+      email: data.email,
+      phone: data.phone || '',
+      role: 'USER',
+      loyaltyPoints: 0,
+      referralCode: myReferralCode,
+      referralCodeUsed: validReferralCode,
+      totalReferrals: 0,
+      createdAt: serverTimestamp(),
+    })
+
+    await signOut(auth)
+
+    alert('Account created successfully. Please login.')
+
+    router.push('/login')
+  } catch (error: any) {
+    console.log('Signup error:', error)
+
+    setFormError(error?.message || 'Signup failed. Please try again.')
+
+    router.push('/login')
+  } finally {
+    setLoading(false)
+  }
+}
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Image/Decoration */}
@@ -300,7 +345,18 @@ export default function SignupPage() {
                 />
               </div>
             </div>
-
+<div className="space-y-2">
+  <Label htmlFor="referralCodeUsed" className="text-foreground font-medium">
+    Referral Code (Optional)
+  </Label>
+  <Input
+    id="referralCodeUsed"
+    type="text"
+    placeholder="Enter referral code"
+    className="h-12 bg-secondary/50 border-border focus:border-primary focus:ring-primary text-foreground"
+    {...register('referralCodeUsed')}
+  />
+</div>
             {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-foreground font-medium">

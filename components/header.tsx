@@ -78,7 +78,7 @@ export function Header() {
   const shouldBeTransparent = isHomePage && !scrolled
 
   return (
-    <header className={`fixed top-0 z-50 w-full transition-all duration-300 ${
+    <header suppressHydrationWarning className={`fixed top-0 z-50 w-full transition-all duration-300 ${
       shouldBeTransparent
         ? 'bg-transparent' 
         : 'bg-background/95 backdrop-blur-md shadow-lg'

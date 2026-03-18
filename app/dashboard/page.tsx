@@ -25,6 +25,7 @@ import {
   Check,
   Loader2,
   Plane,
+  Download,
 } from 'lucide-react'
 
 
@@ -369,6 +370,31 @@ export default function DashboardPage() {
                       {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Loyalty Program Section */}
+            <Card className="border-border/50 mb-8">
+              <CardContent className="p-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Star className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">Loyalty Program</p>
+                      <p className="text-sm text-muted-foreground">Learn how to earn and redeem your loyalty points</p>
+                    </div>
+                  </div>
+                  <a
+                    href="/omnia-loyalty-program.pdf"
+                    download
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-transparent text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download Loyalty Program PDF
+                  </a>
                 </div>
               </CardContent>
             </Card>

@@ -27,6 +27,7 @@ export const signupSchema = z
       .regex(/[0-9]/, 'Must contain at least one number')
       .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
     confirmPassword: z.string(),
+    referralCodeUsed: z.string().optional(),
     agreeTerms: z.boolean().refine((val) => val === true, {
       message: 'You must agree to the terms',
     }),

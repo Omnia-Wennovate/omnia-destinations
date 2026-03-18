@@ -1,6 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
-import { MapPin, Clock, Star } from "lucide-react"
+import { MapPin, Clock, Star, Calendar } from "lucide-react"
 import { BookNowButton } from "@/components/book-now-button"
 
 interface PackageCardProps {
@@ -12,13 +12,39 @@ interface PackageCardProps {
     duration: string
     price: number
     rating: number
+    availableFrom?: string
+    availableUntil?: string
   }
 }
 
 export function PackageCard({ package: pkg }: PackageCardProps) {
   if (!pkg) return null
 
-  const { id, title, location, image, duration, price, rating } = pkg
+  const { id, title, location, image, duration, price, rating, availableFrom, availableUntil } = pkg
+
+  const formatAvailability = (start?: string, end?: string) => {
+    if (!start && !end) return null
+    
+    const formatDateStr = (d: string, includeYear: boolean) => 
+      new Date(d).toLocaleDateString("en-US", { 
+        month: "short", 
+        day: "numeric", 
+        ...(includeYear && { year: "numeric" }) 
+      })
+    
+    if (start && end) {
+      const startDate = new Date(start)
+      const endDate = new Date(end)
+      const sameYear = startDate.getFullYear() === endDate.getFullYear()
+      return `Available: ${formatDateStr(start, !sameYear)} – ${formatDateStr(end, true)}`
+    }
+    
+    if (start) return `Available from: ${formatDateStr(start, true)}`
+    if (end) return `Available until: ${formatDateStr(end, true)}`
+    return null
+  }
+
+  const availabilityText = formatAvailability(availableFrom, availableUntil)
 
   return (
     <Link
@@ -47,16 +73,25 @@ export function PackageCard({ package: pkg }: PackageCardProps) {
           {title}
         </h3>
 
-        <div className="mb-4 flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <MapPin className="h-4 w-4" />
-            <span>{location}</span>
+        <div className="mb-4 flex flex-col gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1">
+              <MapPin className="h-4 w-4" />
+              <span>{location}</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              <span>{duration}</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            <span>{duration}</span>
-          </div>
+          {availabilityText && (
+            <div className="flex items-center gap-1">
+              <Calendar className="h-4 w-4" />
+              <span>{availabilityText}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
