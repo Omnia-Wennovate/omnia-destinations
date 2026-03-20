@@ -180,7 +180,7 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
 
     console.log("🔥 Firestore snapshot:", snap.docs);
 
-    snap.docs.forEach((doc) => {
+    snap.docs.forEach((doc: { id: any; data: () => any; }) => {
       console.log("📦 Package:", doc.id, doc.data());
     });
     return snap.docs.map((d: any) => {
