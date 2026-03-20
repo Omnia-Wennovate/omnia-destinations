@@ -259,7 +259,7 @@ export async function updateBookingStatus(
     updatedAt: serverTimestamp(),
   });
 
-  if (bookingStatus === "completed") {
+  if (bookingStatus === "completed" || bookingStatus === "confirmed") {
     await awardBookingCoins(bookingId);
   } else if (bookingStatus === "cancelled") {
     await reverseBookingCoins(bookingId);

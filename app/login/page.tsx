@@ -22,13 +22,21 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const { isAuthenticated, isInitialized, user, setLoading, setError, setUser } = useAuthStore()
 
+  const getRedirectParams = () => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('redirect')
+    }
+    return null
+  }
+
   // Redirect if already authenticated
   useEffect(() => {
     if (isInitialized && isAuthenticated && user) {
       if (user.role === 'ADMIN') {
         router.replace('/admin')
       } else {
-        router.replace('/dashboard')
+        const redirect = getRedirectParams()
+        router.replace(redirect || '/dashboard')
       }
     }
   }, [isInitialized, isAuthenticated, user, router])
@@ -63,7 +71,8 @@ export default function LoginPage() {
       if (result.role === 'ADMIN') {
         router.push('/admin')
       } else {
-        router.push('/home')
+        const redirect = getRedirectParams()
+        router.push(redirect || '/dashboard')
       }
     } catch (error: any) {
       if (error?.code === 'auth/popup-closed-by-user' || 
@@ -144,7 +153,8 @@ export default function LoginPage() {
       if (role === "ADMIN") {
         router.push("/admin")
       } else {
-        router.push("/dashboard")
+        const redirect = getRedirectParams()
+        router.push(redirect || "/dashboard")
       }
 
     } catch (error: any) {

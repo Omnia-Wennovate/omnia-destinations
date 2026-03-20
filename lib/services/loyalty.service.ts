@@ -231,9 +231,9 @@ export async function awardBookingCoins(bookingId: string): Promise<void> {
 
   const booking = bookingSnap.data() as any;
 
-  // Guard: only award when completed + paid + not already awarded
+  // Guard: only award when completed (or confirmed) + paid + not already awarded
   if (
-    booking.bookingStatus !== "completed" ||
+    !(booking.bookingStatus === "completed" || booking.bookingStatus === "confirmed") ||
     booking.paymentStatus !== "paid" ||
     booking.coinsStatus === "awarded"
   ) return;

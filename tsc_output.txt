@@ -1,0 +1,4 @@
+app/admin/tours/[id]/edit/page.tsx(1018,5): error TS1005: ')' expected.
+app/admin/tours/[id]/edit/page.tsx(1019,3): error TS1109: Expression expected.
+omnia-destinations/app/admin/tours/[id]/edit/page.tsx(1018,5): error TS1005: ')' expected.
+omnia-destinations/app/admin/tours/[id]/edit/page.tsx(1019,3): error TS1109: Expression expected.

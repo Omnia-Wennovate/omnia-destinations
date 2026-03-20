@@ -18,6 +18,14 @@ export interface PackageData {
   featuredImageURL: string;
   galleryImageURLs: string[];
   videoURL?: string;
+  // Daily itinerary (optional)
+  day1?: string;
+  day2?: string;
+  day3?: string;
+  day4?: string;
+  day5?: string;
+  day6?: string;
+  day7?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -51,6 +59,16 @@ export interface CreatePackageData {
   includedServices: string[];
   excludedServices: string[];
   status: "draft" | "published";
+  // Media (optional — used when calling updatePackage with media fields)
+  featuredImageURL?: string;
+  // Daily itinerary (optional)
+  day1?: string;
+  day2?: string;
+  day3?: string;
+  day4?: string;
+  day5?: string;
+  day6?: string;
+  day7?: string;
 }
 
 export interface UploadProgress {

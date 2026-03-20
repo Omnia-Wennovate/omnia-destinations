@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Calendar, Users, CreditCard, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,10 +23,12 @@ import {
 } from '@/components/ui/select'
 import { useAuthStore } from '@/store/auth'
 import { createBooking } from '@/lib/services/bookings.service'
+import { useToast } from '@/hooks/use-toast'
 
 interface BookingDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  children?: React.ReactNode
   packageData: {
     id: string
     title: string
@@ -36,10 +38,16 @@ interface BookingDialogProps {
   }
 }
 
-export function BookingDialog({ open, onOpenChange, packageData }: BookingDialogProps) {
+export function BookingDialog({ open, onOpenChange, children, packageData }: BookingDialogProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const { toast } = useToast()
   const { user, isAuthenticated } = useAuthStore()
   
+  const isControlled = open !== undefined && onOpenChange !== undefined
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isOpen = isControlled ? open : internalOpen
+
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
     firstName: '',
@@ -66,7 +74,7 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
         phone: user.phone || '',
       }))
     }
-  }, [user, isAuthenticated, open])
+  }, [user, isAuthenticated, isOpen])
 
   const totalPrice = packageData.price * parseInt(formData.travelers || '1')
 
@@ -105,6 +113,7 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
 
     try {
       // Create booking in Firestore
+      // Using 10% of total price for the coins calculation as omniaServiceValue
       const newBookingId = await createBooking({
         userId: user.id,
         userName: `${formData.firstName} ${formData.lastName}`.trim() || user.email,
@@ -114,20 +123,70 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
         travelDate: formData.travelDate,
         guests: parseInt(formData.travelers),
         totalAmount: totalPrice,
+        omniaServiceValue: Math.floor(totalPrice * 0.10), // Adding service fee calculation
         specialRequests: formData.specialRequests,
       })
 
-      setBookingId(newBookingId)
-      setBookingSuccess(true)
+      // Initialize Chapa checkout instead of immediate success
+      const checkoutResponse = await fetch('/api/chapa/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: totalPrice,
+          email: formData.email || user.email,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          tx_ref: newBookingId
+        })
+      })
+
+      const checkoutData = await checkoutResponse.json()
+
+      if (!checkoutResponse.ok) {
+        let errorMsg = 'Failed to initialize payment'
+        if (typeof checkoutData.message === 'string') {
+          errorMsg = checkoutData.message
+        } else if (checkoutData.message && typeof checkoutData.message === 'object') {
+          errorMsg = Object.values(checkoutData.message).flat().join(', ')
+        }
+        throw new Error(errorMsg)
+      }
+
+      if (checkoutData.checkoutUrl) {
+        // Redirect to Chapa checkout page
+        window.location.href = checkoutData.checkoutUrl
+      } else {
+        throw new Error('Failed to get checkout URL')
+      }
     } catch (error: any) {
       console.error('Booking error:', error)
       setBookingError(error?.message || 'Failed to create booking. Please try again.')
-    } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleOpenChange = (newOpen: boolean) => {
+    if (newOpen) {
+      // Guard: if opened externally (controlled mode) without going through
+      // handleTriggerClick, still enforce auth and role restrictions.
+      if (!isAuthenticated) {
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}`)
+        if (isControlled) onOpenChange(false)
+        return
+      }
+      if (user?.role === 'ADMIN') {
+        toast({
+          title: 'Admin Restriction',
+          description: 'Admins cannot make bookings. Please use a regular user account.',
+          variant: 'destructive',
+        })
+        if (isControlled) onOpenChange(false)
+        return
+      }
+    }
+
     if (!newOpen) {
       // Reset state when closing
       setStep(1)
@@ -135,7 +194,28 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
       setBookingError(null)
       setBookingId(null)
     }
-    onOpenChange(newOpen)
+    if (isControlled) {
+      onOpenChange(newOpen)
+    } else {
+      setInternalOpen(newOpen)
+    }
+  }
+
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=${encodeURIComponent(pathname)}`)
+      return
+    }
+    if (user?.role === 'ADMIN') {
+      toast({
+        title: "Admin Restriction",
+        description: "Admins cannot make bookings. Please use a regular user account.",
+        variant: "destructive",
+      })
+      return
+    }
+    handleOpenChange(true)
   }
 
   const handleGoToDashboard = () => {
@@ -151,7 +231,7 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
   // Success state
   if (bookingSuccess) {
     return (
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md">
           <div className="flex flex-col items-center text-center py-6">
             <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
@@ -207,43 +287,24 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-foreground">
-            Book: {packageData.title}
-          </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            {packageData.location} - {packageData.duration}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      {children && (
+        <div onClick={handleTriggerClick} className="w-full inline-block cursor-pointer">
+          {children}
+        </div>
+      )}
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-w-md sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-foreground">
+              Book: {packageData.title}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {packageData.location} - {packageData.duration}
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Login prompt for unauthenticated users */}
-        {!isAuthenticated && (
-          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 mb-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                  Sign in required
-                </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                  Please log in to complete your booking and track your reservations.
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleLoginRedirect}
-                  className="mt-3 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
-                >
-                  Sign In
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Progress Steps */}
+          {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 py-4">
           {[1, 2, 3].map((s) => (
             <div
@@ -454,5 +515,6 @@ export function BookingDialog({ open, onOpenChange, packageData }: BookingDialog
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

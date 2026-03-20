@@ -69,12 +69,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated or role mismatch
   useEffect(() => {
-    if (isInitialized && !isAuthenticated) {
-      router.replace('/login')
+    if (isInitialized) {
+      if (!isAuthenticated) {
+        router.replace('/login')
+      } else if (user?.role === 'ADMIN') {
+        router.replace('/admin')
+      }
     }
-  }, [isInitialized, isAuthenticated, router])
+  }, [isInitialized, isAuthenticated, user, router])
 
   // Fetch user data from Firestore
   useEffect(() => {

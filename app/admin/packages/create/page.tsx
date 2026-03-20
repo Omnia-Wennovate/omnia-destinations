@@ -78,6 +78,15 @@ export default function CreatePackagePage() {
   const [includedServices, setIncludedServices] = useState<string[]>([''])
   const [excludedServices, setExcludedServices] = useState<string[]>([''])
 
+  // Daily itinerary state
+  const [day1, setDay1] = useState('')
+  const [day2, setDay2] = useState('')
+  const [day3, setDay3] = useState('')
+  const [day4, setDay4] = useState('')
+  const [day5, setDay5] = useState('')
+  const [day6, setDay6] = useState('')
+  const [day7, setDay7] = useState('')
+
   // Media state
   const [featuredImage, setFeaturedImage] = useState<string | null>(null)
   const [galleryImages, setGalleryImages] = useState<string[]>([])
@@ -124,6 +133,13 @@ export default function CreatePackagePage() {
           includedServices: includedServices.filter(Boolean),
           excludedServices: excludedServices.filter(Boolean),
           status: 'draft',
+          ...(day1.trim() && { day1: day1.trim() }),
+          ...(day2.trim() && { day2: day2.trim() }),
+          ...(day3.trim() && { day3: day3.trim() }),
+          ...(day4.trim() && { day4: day4.trim() }),
+          ...(day5.trim() && { day5: day5.trim() }),
+          ...(day6.trim() && { day6: day6.trim() }),
+          ...(day7.trim() && { day7: day7.trim() }),
         })
       } else {
         // Create new draft
@@ -141,6 +157,13 @@ export default function CreatePackagePage() {
           includedServices: includedServices.filter(Boolean),
           excludedServices: excludedServices.filter(Boolean),
           status: 'draft',
+          ...(day1.trim() && { day1: day1.trim() }),
+          ...(day2.trim() && { day2: day2.trim() }),
+          ...(day3.trim() && { day3: day3.trim() }),
+          ...(day4.trim() && { day4: day4.trim() }),
+          ...(day5.trim() && { day5: day5.trim() }),
+          ...(day6.trim() && { day6: day6.trim() }),
+          ...(day7.trim() && { day7: day7.trim() }),
         })
         setPackageId(id)
       }
@@ -470,6 +493,35 @@ const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   Add Service
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Daily Itinerary */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Itinerary (Optional)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">Fill in only the days you want to display. Empty days will not be shown to users.</p>
+              {[
+                { label: 'Day 1 Activity', value: day1, setter: setDay1 },
+                { label: 'Day 2 Activity', value: day2, setter: setDay2 },
+                { label: 'Day 3 Activity', value: day3, setter: setDay3 },
+                { label: 'Day 4 Activity', value: day4, setter: setDay4 },
+                { label: 'Day 5 Activity', value: day5, setter: setDay5 },
+                { label: 'Day 6 Activity', value: day6, setter: setDay6 },
+                { label: 'Day 7 Activity', value: day7, setter: setDay7 },
+              ].map(({ label, value, setter }, idx) => (
+                <div key={idx} className="space-y-2">
+                  <Label>{label}</Label>
+                  <Textarea
+                    value={value}
+                    onChange={(e) => setter(e.target.value)}
+                    placeholder={`Describe ${label.toLowerCase()}...`}
+                    rows={2}
+                  />
+                </div>
+              ))}
             </CardContent>
           </Card>
 

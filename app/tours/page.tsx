@@ -2,19 +2,19 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { getAllTours, Tour } from "@/lib/services/tours.service"
+import { getToursFromFirestore } from "@/lib/services/tours.service"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { MapPin, Calendar, Users, DollarSign, Loader2 } from "lucide-react"
 
 export default function ToursPage() {
 
-  const [tours, setTours] = useState<Tour[]>([])
+  const [tours, setTours] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadTours() {
-      const data = await getAllTours()
+      const data = await getToursFromFirestore()
       setTours(data)
       setLoading(false)
     }
@@ -50,21 +50,21 @@ export default function ToursPage() {
               <CardContent className="p-5">
 
                 <h2 className="text-xl font-semibold mb-2">
-                  {tour.city}, {tour.country}
+                  {tour.title}
                 </h2>
 
                 <p className="text-sm text-muted-foreground mb-4">
-                  {tour.description}
+                  {tour.country}
                 </p>
 
                 <div className="flex items-center gap-2 text-sm mb-2">
                   <Calendar className="h-4 w-4" />
-                  {tour.startDate}
+                  {tour.duration || 'Flexible'}
                 </div>
 
                 <div className="flex items-center gap-2 text-sm mb-2">
                   <Users className="h-4 w-4" />
-                  Max {tour.maxGuests} Guests
+                  Flexible Guests
                 </div>
 
                 <div className="flex items-center gap-2 font-semibold mb-4">
@@ -72,7 +72,7 @@ export default function ToursPage() {
                   {tour.price}
                 </div>
 
-                <Link href={`/tours/${tour.slug}`}>
+                <Link href={`/tours/${tour.id}`}>
                   <Button className="w-full">
                     View Tour
                   </Button>
