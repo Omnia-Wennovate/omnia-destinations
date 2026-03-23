@@ -33,7 +33,8 @@ interface BookingDialogProps {
     id: string
     title: string
     location: string
-    price: number
+    singlePrice: number
+    sharingPrice: number
     duration: string
   }
 }
@@ -57,6 +58,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     travelers: '1',
     travelDate: '',
     specialRequests: '',
+    roomType: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [bookingSuccess, setBookingSuccess] = useState(false)
@@ -76,7 +78,8 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     }
   }, [user, isAuthenticated, isOpen])
 
-  const totalPrice = packageData.price * parseInt(formData.travelers || '1')
+  const pricePerPerson = formData.roomType === 'sharing' ? packageData.sharingPrice : packageData.singlePrice;
+  const totalPrice = pricePerPerson * parseInt(formData.travelers || '1')
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -108,6 +111,11 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
       return
     }
 
+    if (!formData.roomType) {
+      setBookingError('Please select a room type.')
+      return
+    }
+
     setIsSubmitting(true)
     setBookingError(null)
 
@@ -122,6 +130,8 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
         packageTitle: packageData.title,
         travelDate: formData.travelDate,
         guests: parseInt(formData.travelers),
+        roomType: formData.roomType as "single" | "sharing",
+        pricePerPerson,
         totalAmount: totalPrice,
         omniaServiceValue: Math.floor(totalPrice * 0.10), // Adding service fee calculation
         specialRequests: formData.specialRequests,
@@ -394,6 +404,22 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                 min={new Date().toISOString().split('T')[0]}
               />
             </div>
+            <div className="space-y-3">
+              <Label>Room Type (Required)</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <label className={`flex cursor-pointer flex-col items-center justify-between rounded-md border-2 p-4 pt-6 ${formData.roomType === 'single' ? 'border-primary bg-primary/5' : 'border-muted bg-popover hover:bg-accent hover:text-accent-foreground'}`}>
+                  <input type="radio" name="roomType" value="single" className="sr-only" onChange={(e) => handleInputChange('roomType', e.target.value)} />
+                  <span className="text-sm font-semibold text-center">Single Room</span>
+                  <span className="mt-1 text-sm text-primary font-bold text-center">${packageData.singlePrice}/person</span>
+                </label>
+                <label className={`flex cursor-pointer flex-col items-center justify-between rounded-md border-2 p-4 pt-6 ${formData.roomType === 'sharing' ? 'border-primary bg-primary/5' : 'border-muted bg-popover hover:bg-accent hover:text-accent-foreground'}`}>
+                  <input type="radio" name="roomType" value="sharing" className="sr-only" onChange={(e) => handleInputChange('roomType', e.target.value)} />
+                  <span className="text-sm font-semibold text-center">Sharing Room</span>
+                  <span className="mt-1 text-sm text-primary font-bold text-center">${packageData.sharingPrice}/person</span>
+                </label>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
@@ -456,10 +482,14 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                   <span className="text-muted-foreground">Travelers:</span>
                   <span className="font-medium text-foreground">{formData.travelers}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Room Type:</span>
+                  <span className="font-medium text-foreground capitalize">{formData.roomType}</span>
+                </div>
                 <div className="border-t border-border pt-2 mt-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      ${packageData.price.toLocaleString()} x {formData.travelers} travelers
+                      ${pricePerPerson.toLocaleString()} x {formData.travelers} travelers
                     </span>
                   </div>
                   <div className="flex justify-between text-lg font-bold">
@@ -491,7 +521,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={
                 (step === 1 && (!formData.firstName || !formData.email)) ||
-                (step === 2 && !formData.travelDate)
+                (step === 2 && (!formData.travelDate || !formData.roomType))
               }
             >
               Continue

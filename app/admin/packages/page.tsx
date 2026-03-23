@@ -169,7 +169,7 @@ export default function AdminPackagesPage() {
               <TableHead className="w-[80px]">Image</TableHead>
               <TableHead>Title</TableHead>
               <TableHead>Location</TableHead>
-              <TableHead>Price</TableHead>
+              <TableHead>Prices</TableHead>
               <TableHead>Duration</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[70px]">Actions</TableHead>
@@ -209,7 +209,12 @@ export default function AdminPackagesPage() {
                   </TableCell>
                   <TableCell className="font-medium">{pkg.title}</TableCell>
                   <TableCell>{pkg.location}</TableCell>
-                  <TableCell>${pkg.price}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col text-sm">
+                      <span>Single: ${pkg.singlePrice}</span>
+                      <span className="text-muted-foreground">Sharing: ${pkg.sharingPrice}</span>
+                    </div>
+                  </TableCell>
                   <TableCell>{pkg.duration} days</TableCell>
                   <TableCell>
                     <Badge

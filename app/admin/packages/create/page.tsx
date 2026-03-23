@@ -68,7 +68,8 @@ export default function CreatePackagePage() {
   const [slug, setSlug] = useState('')
   const [shortDescription, setShortDescription] = useState('')
   const [fullDescription, setFullDescription] = useState('')
-  const [price, setPrice] = useState('')
+  const [singlePrice, setSinglePrice] = useState('')
+  const [sharingPrice, setSharingPrice] = useState('')
   const [duration, setDuration] = useState('')
   const [location, setLocation] = useState('')
   const [category, setCategory] = useState('')
@@ -124,7 +125,8 @@ export default function CreatePackagePage() {
           slug,
           shortDescription,
           fullDescription: fullDescription || '',
-          price: parseFloat(price) || 0,
+          singlePrice: parseFloat(singlePrice) || 0,
+          sharingPrice: parseFloat(sharingPrice) || 0,
           duration: parseInt(duration) || 0,
           location,
           category,
@@ -148,7 +150,8 @@ export default function CreatePackagePage() {
           slug,
           shortDescription,
           fullDescription,
-          price: parseFloat(price) || 0,
+          singlePrice: parseFloat(singlePrice) || 0,
+          sharingPrice: parseFloat(sharingPrice) || 0,
           duration: parseInt(duration) || 0,
           location,
           category,
@@ -660,12 +663,23 @@ const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="price">Price (USD) *</Label>
+                <Label htmlFor="singlePrice">Single Price (USD) *</Label>
                 <Input
-                  id="price"
+                  id="singlePrice"
                   type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  value={singlePrice}
+                  onChange={(e) => setSinglePrice(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sharingPrice">Sharing Price (USD) *</Label>
+                <Input
+                  id="sharingPrice"
+                  type="number"
+                  value={sharingPrice}
+                  onChange={(e) => setSharingPrice(e.target.value)}
                   placeholder="0"
                 />
               </div>

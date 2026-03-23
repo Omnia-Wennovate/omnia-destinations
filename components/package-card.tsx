@@ -10,7 +10,8 @@ interface PackageCardProps {
     location: string
     image?: string
     duration: string
-    price: number
+    singlePrice: number
+    sharingPrice: number
     rating: number
     availableFrom?: string
     availableUntil?: string
@@ -20,7 +21,7 @@ interface PackageCardProps {
 export function PackageCard({ package: pkg }: PackageCardProps) {
   if (!pkg) return null
 
-  const { id, title, location, image, duration, price, rating, availableFrom, availableUntil } = pkg
+  const { id, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil } = pkg
 
   const formatAvailability = (start?: string, end?: string) => {
     if (!start && !end) return null
@@ -95,13 +96,21 @@ export function PackageCard({ package: pkg }: PackageCardProps) {
         </div>
 
         <div className="flex items-center justify-between">
-          <div>
-            <span className="text-2xl font-bold text-primary">${price}</span>
-            <span className="text-sm text-muted-foreground">/person</span>
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xs text-muted-foreground">Single:</span>
+              <span className="text-lg font-bold text-primary">${singlePrice}</span>
+              <span className="text-[10px] text-muted-foreground">/person</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-xs text-muted-foreground">Sharing:</span>
+              <span className="text-lg font-bold text-primary">${sharingPrice}</span>
+              <span className="text-[10px] text-muted-foreground">/person</span>
+            </div>
           </div>
 
           <BookNowButton
-            packageData={{ id, title, location, price, duration }}
+            packageData={{ id, title, location, singlePrice, sharingPrice, duration }}
           />
         </div>
       </div>

@@ -213,14 +213,14 @@ export default function AdminBookingsPage() {
     const matchesSearch =
       searchQuery === '' ||
       b.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.tourTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.tourTitle || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.userEmail.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter === 'all' || b.bookingStatus === statusFilter
     return matchesSearch && matchesStatus
   })
 
   // ── Summary stats ─────────────────────────────────────────────
-  const totalRevenue = bookings.reduce((s, b) => s + (b.paymentStatus === 'paid' ? b.amount : 0), 0)
+  const totalRevenue = bookings.reduce((s, b) => s + (b.paymentStatus === 'paid' ? (b.amount || b.totalAmount || 0) : 0), 0)
   const confirmedCount = bookings.filter((b) => b.bookingStatus === 'confirmed').length
   const pendingCount = bookings.filter((b) => b.bookingStatus === 'pending').length
   const cancelledCount = bookings.filter((b) => b.bookingStatus === 'cancelled').length
@@ -328,6 +328,7 @@ export default function AdminBookingsPage() {
                   <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">User</th>
                   <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">Tour</th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Guests</th>
+                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Room Type</th>
                   <th className="text-right py-3.5 px-4 font-semibold text-muted-foreground">Amount</th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Payment</th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Status</th>
@@ -337,7 +338,7 @@ export default function AdminBookingsPage() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16">
+                    <td colSpan={8} className="text-center py-16">
                       <div className="flex flex-col items-center gap-3 text-muted-foreground">
                         <Calendar className="h-12 w-12 opacity-30" />
                         <p className="text-lg font-medium">No bookings found</p>
@@ -370,9 +371,15 @@ export default function AdminBookingsPage() {
                           {booking.guests}
                         </span>
                       </td>
+                      {/* Room Type */}
+                      <td className="py-3.5 px-4 text-center text-sm">
+                        <span className="capitalize font-medium text-foreground">
+                          {booking.roomType || 'Single'}
+                        </span>
+                      </td>
                       {/* Amount */}
                       <td className="py-3.5 px-4 text-right font-semibold text-foreground">
-                        ${booking.amount.toLocaleString()}
+                        ${booking.amount?.toLocaleString() || booking.totalAmount?.toLocaleString()}
                       </td>
                       {/* Payment */}
                       <td className="py-3.5 px-4 text-center">
@@ -490,7 +497,7 @@ export default function AdminBookingsPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Amount</span>
-                <span className="font-medium text-foreground">${cancelTarget.amount.toLocaleString()}</span>
+                <span className="font-medium text-foreground">${(cancelTarget.amount || cancelTarget.totalAmount || 0).toLocaleString()}</span>
               </div>
             </div>
           )}
@@ -527,7 +534,7 @@ export default function AdminBookingsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount</span>
-                  <span className="font-medium text-foreground">${refundTarget.amount.toLocaleString()}</span>
+                  <span className="font-medium text-foreground">${(refundTarget.amount || refundTarget.totalAmount || 0).toLocaleString()}</span>
                 </div>
               </div>
               <div>

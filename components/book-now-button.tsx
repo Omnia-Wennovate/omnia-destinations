@@ -9,7 +9,8 @@ interface BookNowButtonProps {
     id: string
     title: string
     location: string
-    price: number
+    singlePrice: number
+    sharingPrice: number
     duration: string
   }
 }

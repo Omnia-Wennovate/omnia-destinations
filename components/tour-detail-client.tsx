@@ -310,9 +310,17 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                 {/* Price */}
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">From</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-primary">${tour.price}</span>
-                    <span className="text-muted-foreground">/person</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm text-muted-foreground">Single:</span>
+                      <span className="text-3xl font-bold text-primary">${tour.singlePrice}</span>
+                      <span className="text-sm text-muted-foreground">/person</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm text-muted-foreground">Sharing:</span>
+                      <span className="text-3xl font-bold text-primary">${tour.sharingPrice}</span>
+                      <span className="text-sm text-muted-foreground">/person</span>
+                    </div>
                   </div>
                 </div>
 
@@ -344,7 +352,8 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                     id: tour.id,
                     title: tour.title,
                     location: tour.location,
-                    price: tour.price,
+                    singlePrice: tour.singlePrice,
+                    sharingPrice: tour.sharingPrice,
                     duration: tour.duration
                   }}
                 >

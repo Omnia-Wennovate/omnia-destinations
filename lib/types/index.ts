@@ -9,7 +9,9 @@ export interface Package {
   location: string
   image: string
   duration: string
-  price: number
+  price?: number
+  singlePrice: number
+  sharingPrice: number
   rating: number
   // Extended details for product page
   description?: string
@@ -41,7 +43,9 @@ export interface Tour {
   title: string
   location: string
   duration: string
-  price: number
+  price?: number
+  singlePrice?: number
+  sharingPrice?: number
   rating: number
   reviews: number
   image: string

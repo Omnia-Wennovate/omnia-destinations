@@ -6,7 +6,8 @@ export interface PackageData {
   slug: string;
   shortDescription: string;
   fullDescription: string;
-  price: number;
+  singlePrice: number;
+  sharingPrice: number;
   duration: number;
   location: string;
   category: string;
@@ -36,7 +37,8 @@ export interface PackageListItem {
   title: string;
   slug?: string;
   shortDescription: string;
-  price: number;
+  singlePrice: number;
+  sharingPrice: number;
   duration: number;
   featuredImageURL?: string;
   location: string;
@@ -50,7 +52,8 @@ export interface CreatePackageData {
   slug: string;
   shortDescription: string;
   fullDescription: string;
-  price: number;
+  singlePrice: number;
+  sharingPrice: number;
   duration: number;
   location: string;
   category: string;
@@ -208,7 +211,8 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
         title: data.title,
         slug: data.slug,
         shortDescription: data.shortDescription,
-        price: data.price,
+        singlePrice: data.singlePrice || data.price || 0,
+        sharingPrice: data.sharingPrice || data.price || 0,
         duration: data.duration,
         featuredImageURL: data.featuredImageURL,
         location: data.location,
@@ -399,7 +403,8 @@ export function validatePackageForPublish(pkg: Partial<PackageData>): string[] {
   if (!pkg.slug?.trim()) errors.push("Slug is required");
   if (!pkg.shortDescription?.trim()) errors.push("Short description is required");
   if (!pkg.fullDescription?.trim()) errors.push("Full description is required");
-  if (!pkg.price || pkg.price <= 0) errors.push("Valid price is required");
+  if (!pkg.singlePrice || pkg.singlePrice <= 0) errors.push("Valid single price is required");
+  if (!pkg.sharingPrice || pkg.sharingPrice <= 0) errors.push("Valid sharing price is required");
   if (!pkg.duration || pkg.duration <= 0) errors.push("Valid duration is required");
   if (!pkg.location?.trim()) errors.push("Location is required");
   if (!pkg.category?.trim()) errors.push("Category is required");

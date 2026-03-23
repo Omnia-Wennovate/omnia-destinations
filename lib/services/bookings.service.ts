@@ -13,6 +13,8 @@ export interface FirestoreBooking {
   bookingDate: any;
   travelDate: string;
   guests: number;
+  roomType: "single" | "sharing";
+  pricePerPerson: number;
   totalAmount: number;
   amount?: number;
   // Loyalty fields
@@ -35,6 +37,8 @@ export interface CreateBookingData {
   packageTitle: string;
   travelDate: string;
   guests: number;
+  roomType: "single" | "sharing";
+  pricePerPerson: number;
   totalAmount: number;
   omniaServiceValue?: number; // defaults to 0 if not provided
   specialRequests?: string;
@@ -62,6 +66,8 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     bookingDate: serverTimestamp(),
     travelDate: data.travelDate,
     guests: data.guests,
+    roomType: data.roomType,
+    pricePerPerson: data.pricePerPerson,
     totalAmount: data.totalAmount,
     amount: data.totalAmount,
     omniaServiceValue: data.omniaServiceValue ?? 0,
@@ -113,6 +119,8 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
         bookingDate: data.bookingDate || data.createdAt,
         travelDate: data.travelDate || "",
         guests: data.guests || data.guestCount || 1,
+        roomType: data.roomType || "single",
+        pricePerPerson: data.pricePerPerson || 0,
         totalAmount: data.totalAmount || data.amount || 0,
         amount: data.amount || data.totalAmount || 0,
         omniaServiceValue: data.omniaServiceValue ?? 0,
@@ -166,6 +174,8 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
         bookingDate: data.bookingDate || data.createdAt,
         travelDate: data.travelDate || "",
         guests: data.guests || data.guestCount || 1,
+        roomType: data.roomType || "single",
+        pricePerPerson: data.pricePerPerson || 0,
         totalAmount: data.totalAmount || data.amount || 0,
         amount: data.amount || data.totalAmount || 0,
         omniaServiceValue: data.omniaServiceValue ?? 0,

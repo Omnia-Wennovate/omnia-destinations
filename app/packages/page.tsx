@@ -73,7 +73,8 @@ export default function PackagesPage() {
       location: pkg.location,
       image: pkg.featuredImageURL || pkg.images?.[0] || "/images/placeholder.jpg",
       duration: `${pkg.duration} Days`,
-      price: Number(pkg.price),
+      singlePrice: Number(pkg.singlePrice) || 0,
+      sharingPrice: Number(pkg.sharingPrice) || 0,
       rating: 4.5,
       availableFrom: pkg.availableFrom,
       availableUntil: pkg.availableUntil,
@@ -89,7 +90,8 @@ export default function PackagesPage() {
       location: pkg.location,
       image: pkg.image,
       duration: pkg.duration,
-      price: pkg.price,
+      singlePrice: pkg.singlePrice || 0,
+      sharingPrice: pkg.sharingPrice || 0,
       rating: pkg.rating,
     }))
   }, [firestorePackages])
@@ -129,7 +131,7 @@ export default function PackagesPage() {
           comparison = a.location.localeCompare(b.location)
           break
         case 'price':
-          comparison = a.price - b.price
+          comparison = a.singlePrice - b.singlePrice
           break
         case 'duration':
           comparison = a.duration.localeCompare(b.duration)
