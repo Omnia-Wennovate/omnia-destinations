@@ -218,92 +218,73 @@ export async function writeCoinTransaction(params: {
  * Idempotent — checks coinsStatus === "awarded" before writing.
  * Also updates annualOmniaValue, lifetimeOmniaValue on the user doc.
  */
-export async function awardBookingCoins(bookingId: string): Promise<void> {
+export async function awardBookingCoins(bookingId: string) {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  if (!db || !modules.firestore) throw new Error("Database not initialized");
 
-  const { doc, getDoc, updateDoc, serverTimestamp, increment } = modules.firestore;
+  if (!db || !modules.firestore) return;
+
+  const {
+    doc,
+    getDoc,
+    updateDoc,
+    increment,
+    addDoc,
+    collection,
+    serverTimestamp,
+  } = modules.firestore;
 
   const bookingRef = doc(db, "bookings", bookingId);
   const bookingSnap = await getDoc(bookingRef);
-  if (!bookingSnap.exists()) return;
+
+  if (!bookingSnap.exists()) {
+    console.log("Booking not found");
+    return;
+  }
 
   const booking = bookingSnap.data() as any;
 
-  // Guard: only award when completed (or confirmed) + paid + not already awarded
-  if (
-    !(booking.bookingStatus === "completed" || booking.bookingStatus === "confirmed") ||
-    booking.paymentStatus !== "paid" ||
-    booking.coinsStatus === "awarded"
-  ) return;
+  console.log("BOOKING DATA:", booking);
 
-  const userId: string = booking.userId;
-  const omniaServiceValue: number = booking.omniaServiceValue ?? 0;
+  const userId = booking.userId;
+  const value = booking.omniaServiceValue || 0;
+  const paymentStatus = booking.paymentStatus;
 
-  // Get user — needed for tier and annual reset check
+  if (!userId) {
+    console.log("Missing userId");
+    return;
+  }
+
+  if (paymentStatus !== "paid") {
+    console.log("Payment not paid:", paymentStatus);
+    return;
+  }
+
+  const coins = Math.floor(value / 1000);
+
+  console.log("COINS:", coins);
+
   const userRef = doc(db, "users", userId);
-  const userSnap = await getDoc(userRef);
-  const userData = userSnap.exists() ? (userSnap.data() as any) : {};
 
-  // ── Annual reset check ─────────────────────────────────────────────────────
-  // annualOmniaValue resets every 12 months from tierUpdatedAt (or account creation)
-  const tierUpdatedAt: Date = userData.tierUpdatedAt?.toDate?.()
-    ?? userData.createdAt?.toDate?.()
-    ?? new Date();
-  const resetDate = new Date(tierUpdatedAt);
-  resetDate.setFullYear(resetDate.getFullYear() + 1);
+  await updateDoc(userRef, {
+    loyaltyPoints: increment(coins),
+    totalCoinsEarned: increment(coins),
+    annualOmniaValue: increment(value),
+  });
 
-  const shouldReset = new Date() >= resetDate;
-  const currentAnnualValue: number = shouldReset ? 0 : (userData.annualOmniaValue ?? 0);
+  await addDoc(collection(db, "users", userId, "coinsHistory"), {
+    amount: coins,
+    type: "booking",
+    bookingId,
+    createdAt: serverTimestamp(),
+  });
 
-  const tier: TierName = userData.tier ?? "Hope";
-  const baseCoins = calculateBaseCoins(omniaServiceValue);
-  const coinsEarned = applyTierMultiplier(baseCoins, tier);
-  const multiplierApplied = getTierMultiplier(tier);
-
-  // Build user update
-  const userUpdate: Record<string, any> = {
-    annualOmniaValue: (currentAnnualValue + omniaServiceValue),
-    lifetimeOmniaValue: increment(omniaServiceValue),
-    updatedAt: serverTimestamp(),
-  };
-  if (shouldReset) {
-    // Record the new reset cycle start
-    userUpdate.annualResetDate = new Date().toISOString();
-  }
-
-  if (coinsEarned > 0) {
-    await writeCoinTransaction({
-      userId,
-      amount: coinsEarned,
-      type: "booking",
-      relatedBookingId: bookingId,
-      reason: `Booking completed: ${booking.packageTitle ?? bookingId}`,
-      multiplierApplied,
-      tierAtTime: tier,
-      status: "active",
-      updateBalance: false, // we handle balance in the same user update below
-    });
-    userUpdate.loyaltyPoints = increment(coinsEarned);
-    userUpdate.totalCoinsEarned = increment(coinsEarned);
-  }
-
-  await updateDoc(userRef, userUpdate);
-
-  // Mark booking as awarded
   await updateDoc(bookingRef, {
     coinsStatus: "awarded",
-    coinsEarned,
-    updatedAt: serverTimestamp(),
+    coinsEarned: coins,
   });
 
-  // Evaluate tier upgrade using UPDATED values
-  await evaluateAndUpgradeTier(userId, {
-    annualOmniaValue: currentAnnualValue + omniaServiceValue,
-    totalCoinsEarned: (userData.totalCoinsEarned ?? 0) + coinsEarned,
-    currentTier: tier,
-  });
+  console.log("LOYALTY AWARDED");
 }
 
 /**

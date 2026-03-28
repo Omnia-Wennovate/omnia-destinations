@@ -252,22 +252,44 @@ export async function markAsRefunded(
 
 // Update booking status (admin)
 export async function updateBookingStatus(
-  bookingId: string,
+  tx_ref: string,
   bookingStatus: "confirmed" | "pending" | "cancelled" | "completed"
 ): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     throw new Error("Database not initialized");
   }
 
-  const { doc, updateDoc, serverTimestamp } = modules.firestore;
+  const {
+    collection,
+    query,
+    where,
+    getDocs,
+    updateDoc,
+    serverTimestamp,
+  } = modules.firestore;
 
-  await updateDoc(doc(db, "bookings", bookingId), {
+  const q = query(
+    collection(db, "bookings"),
+    where("tx_ref", "==", tx_ref)
+  );
+
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) {
+    throw new Error("Booking not found");
+  }
+
+  const bookingDoc = snapshot.docs[0];
+
+  await updateDoc(bookingDoc.ref, {
     bookingStatus,
     updatedAt: serverTimestamp(),
   });
+
+  const bookingId = bookingDoc.id;
 
   if (bookingStatus === "completed" || bookingStatus === "confirmed") {
     await awardBookingCoins(bookingId);
