@@ -150,18 +150,18 @@ export default function EditTourPage() {
         if (tour.priceIncludes?.length) {
           setPriceIncludes(tour.priceIncludes);
         }
-  if (tour.priceExcludes?.length) {
-  setPriceExcludes(tour.priceExcludes);
-  }
+        if (tour.priceExcludes?.length) {
+          setPriceExcludes(tour.priceExcludes);
+        }
 
-  // Media
-  if (tour.media) {
-  setMedia({
-    images: tour.media.images || [],
-    videos: tour.media.videos || [],
-  });
-  }
-  } catch (err: any) {
+        // Media
+        if (tour.media) {
+          setMedia({
+            images: tour.media.images || [],
+            videos: tour.media.videos || [],
+          });
+        }
+      } catch (err: any) {
         setError(err?.message || "Failed to load tour");
       } finally {
         setLoading(false);
@@ -301,9 +301,9 @@ export default function EditTourPage() {
         status: submitStatus,
       };
 
-  await updateTour(tourId, tourData);
-  await saveTourMedia(tourId, media);
-  setSuccess(true);
+      await updateTour(tourId, tourData);
+      await saveTourMedia(tourId, media);
+      setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       setError(err?.message || "Failed to update tour");
@@ -827,17 +827,16 @@ export default function EditTourPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Media Upload */}
+            <TourMediaUploader
+              tourId={tourId}
+              existingMedia={media}
+              onMediaChange={setMedia}
+            />
           </div>
 
-          {/* Media Upload */}
-  <TourMediaUploader
-    tourId={tourId}
-    existingMedia={media}
-    onMediaChange={setMedia}
-  />
-  </div>
-
-  {/* Sidebar */}
+          {/* Sidebar */}
           <div className="space-y-6">
             <Card className="sticky top-24">
               <CardHeader>
