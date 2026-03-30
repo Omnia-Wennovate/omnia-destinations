@@ -142,7 +142,10 @@ export default function PackageDetailPage() {
     gallery: packageData.galleryImageURLs,
     videoUrl: packageData.videoURL,
     itinerary,
+    durationDays: packageData.duration,
+    availableFrom: packageData.availableFrom,
+    availableUntil: packageData.availableUntil,
   }
 
-  return <TourDetailClient tour={tourData} />
+  return <TourDetailClient tour={tourData as any} />
 }

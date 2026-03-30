@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuthStore } from '@/store/auth'
-import { createBooking } from '@/lib/services/bookings.service'
+import { createBooking, getUserBookings } from '@/lib/services/bookings.service'
 import { useToast } from '@/hooks/use-toast'
 
 interface BookingDialogProps {
@@ -35,7 +35,9 @@ interface BookingDialogProps {
     location: string
     singlePrice: number
     sharingPrice: number
-    duration: string
+    duration: string | number
+    availableFrom?: string
+    availableUntil?: string
   }
 }
 
@@ -85,7 +87,69 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (step === 2) {
+      if (!formData.travelDate) {
+        setBookingError('Please select a travel date.')
+        return
+      }
+
+      if (packageData.availableFrom && formData.travelDate < packageData.availableFrom) {
+        setBookingError('Selected date is outside the package availability.')
+        return
+      }
+
+      if (packageData.availableUntil && formData.travelDate > packageData.availableUntil) {
+        setBookingError('Selected date is outside the package availability.')
+        return
+      }
+
+      if (!formData.roomType) {
+        setBookingError('Please select a room type.')
+        return
+      }
+
+      setBookingError(null)
+      setIsSubmitting(true)
+      
+      try {
+        if (user?.id) {
+          const userBookings = await getUserBookings(user.id)
+          const dur = typeof packageData.duration === 'string' ? parseInt(packageData.duration) : packageData.duration
+          const newDuration = isNaN(dur) || dur <= 0 ? 1 : dur
+          
+          const newStart = new Date(formData.travelDate)
+          const newEnd = new Date(newStart)
+          newEnd.setDate(newEnd.getDate() + newDuration - 1)
+          
+          newStart.setHours(0,0,0,0)
+          newEnd.setHours(0,0,0,0)
+          
+          for (const b of userBookings) {
+            if (b.bookingStatus === 'cancelled') continue
+            if (!b.travelDate) continue
+            
+            const existingStart = new Date(b.travelDate)
+            existingStart.setHours(0,0,0,0)
+            const existingDur = b.durationDays || 1
+            const existingEnd = new Date(existingStart)
+            existingEnd.setDate(existingEnd.getDate() + existingDur - 1)
+            existingEnd.setHours(0,0,0,0)
+            
+            if (newStart <= existingEnd && newEnd >= existingStart) {
+              setBookingError("This booking overlaps with one of your existing trips.")
+              setIsSubmitting(false)
+              return
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking date overlap:", error)
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+    
     if (step < 3) setStep(step + 1)
   }
 
@@ -103,6 +167,16 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     // Validate required fields
     if (!formData.travelDate) {
       setBookingError('Please select a travel date.')
+      return
+    }
+
+    if (packageData.availableFrom && formData.travelDate < packageData.availableFrom) {
+      setBookingError('Selected date is outside the package availability.')
+      return
+    }
+
+    if (packageData.availableUntil && formData.travelDate > packageData.availableUntil) {
+      setBookingError('Selected date is outside the package availability.')
       return
     }
 
@@ -401,7 +475,12 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                 type="date"
                 value={formData.travelDate}
                 onChange={(e) => handleInputChange('travelDate', e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={
+                  packageData.availableFrom && packageData.availableFrom.length === 10 && packageData.availableFrom > new Date().toISOString().split('T')[0]
+                    ? packageData.availableFrom
+                    : new Date().toISOString().split('T')[0]
+                }
+                max={packageData.availableUntil}
               />
             </div>
             <div className="space-y-3">

@@ -13,6 +13,9 @@ export interface Package {
   singlePrice: number
   sharingPrice: number
   rating: number
+  availableFrom?: string
+  availableUntil?: string
+  durationDays?: number
   // Extended details for product page
   description?: string
   highlights?: string[]
@@ -51,6 +54,9 @@ export interface Tour {
   image: string
   groupSize: string
   nextAvailable: string
+  availableFrom?: string
+  availableUntil?: string
+  durationDays?: number
   // Extended details for product page
   description?: string
   highlights?: string[]

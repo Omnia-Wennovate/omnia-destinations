@@ -1,5 +1,6 @@
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
 import { awardBookingCoins, reverseBookingCoins, awardReferralCoins } from "@/lib/services/loyalty.service";
+import { getPackageById } from "@/lib/services/packages.service";
 
 export interface FirestoreBooking {
   id: string;
@@ -12,6 +13,7 @@ export interface FirestoreBooking {
   tourTitle?: string;
   bookingDate: any;
   travelDate: string;
+  durationDays?: number;
   guests: number;
   roomType: "single" | "sharing";
   pricePerPerson: number;
@@ -55,6 +57,48 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
 
   const { collection, addDoc, serverTimestamp } = modules.firestore;
 
+  // 1. Validate package and dates
+  const pkg = await getPackageById(data.packageId);
+  if (!pkg) {
+    throw new Error("Package not found.");
+  }
+
+  if (pkg.availableFrom && data.travelDate < pkg.availableFrom) {
+    throw new Error("Selected date is outside the package availability.");
+  }
+  if (pkg.availableUntil && data.travelDate > pkg.availableUntil) {
+    throw new Error("Selected date is outside the package availability.");
+  }
+
+  // 2. Overlap detection
+  const newDuration = pkg.duration > 0 ? pkg.duration : 1;
+  const newStart = new Date(data.travelDate);
+  const newEnd = new Date(newStart);
+  newEnd.setDate(newEnd.getDate() + newDuration - 1);
+
+  // Set time of both to 00:00:00 to avoid time shift issues
+  newStart.setHours(0,0,0,0);
+  newEnd.setHours(0,0,0,0);
+
+  const userBookings = await getUserBookings(data.userId);
+
+  for (const b of userBookings) {
+    if (b.bookingStatus === 'cancelled') continue;
+    if (!b.travelDate) continue;
+
+    const existingStart = new Date(b.travelDate);
+    existingStart.setHours(0,0,0,0);
+    const existingDur = (b as any).durationDays || 1;
+    
+    const existingEnd = new Date(existingStart);
+    existingEnd.setDate(existingEnd.getDate() + existingDur - 1);
+    existingEnd.setHours(0,0,0,0);
+
+    if (newStart <= existingEnd && newEnd >= existingStart) {
+      throw new Error("This booking overlaps with one of your existing trips.");
+    }
+  }
+
   const bookingDoc = {
     userId: data.userId,
     userName: data.userName,
@@ -65,6 +109,7 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     tourTitle: data.packageTitle,
     bookingDate: serverTimestamp(),
     travelDate: data.travelDate,
+    durationDays: pkg.duration > 0 ? pkg.duration : 1,
     guests: data.guests,
     roomType: data.roomType,
     pricePerPerson: data.pricePerPerson,
@@ -118,6 +163,7 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
         tourTitle: data.tourTitle || data.packageTitle || "Unknown Tour",
         bookingDate: data.bookingDate || data.createdAt,
         travelDate: data.travelDate || "",
+        durationDays: data.durationDays || 1,
         guests: data.guests || data.guestCount || 1,
         roomType: data.roomType || "single",
         pricePerPerson: data.pricePerPerson || 0,
@@ -173,6 +219,7 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
         tourTitle: data.tourTitle || data.packageTitle || "Unknown Tour",
         bookingDate: data.bookingDate || data.createdAt,
         travelDate: data.travelDate || "",
+        durationDays: data.durationDays || 1,
         guests: data.guests || data.guestCount || 1,
         roomType: data.roomType || "single",
         pricePerPerson: data.pricePerPerson || 0,

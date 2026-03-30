@@ -352,9 +352,11 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                     id: tour.id,
                     title: tour.title,
                     location: tour.location,
-                    singlePrice: tour.singlePrice,
-                    sharingPrice: tour.sharingPrice,
-                    duration: tour.duration
+                    singlePrice: tour.singlePrice || 0,
+                    sharingPrice: tour.sharingPrice || 0,
+                    duration: tour.duration,
+                    availableFrom: tour.availableFrom,
+                    availableUntil: tour.availableUntil
                   }}
                 >
                   <Button className="w-full" size="lg">
