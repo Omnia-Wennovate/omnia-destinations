@@ -167,6 +167,7 @@ const onSubmit = async (data: SignupFormData) => {
     const usedCode = data.referralCodeUsed?.trim().toUpperCase() || ''
 
     let validReferralCode = ''
+    let referredBy = '' // referrer's UID — used later to award referral coins
 
     if (usedCode) {
       const q = query(
@@ -184,6 +185,7 @@ const onSubmit = async (data: SignupFormData) => {
         })
 
         validReferralCode = usedCode
+        referredBy = referrerDoc.id // store the referrer's UID
       }
     }
 
@@ -192,9 +194,13 @@ const onSubmit = async (data: SignupFormData) => {
       email: data.email,
       phone: data.phone || '',
       role: 'USER',
+      tier: 'Hope',
       loyaltyPoints: 0,
+      totalCoinsEarned: 0,
+      annualOmniaValue: 0,
       referralCode: myReferralCode,
       referralCodeUsed: validReferralCode,
+      referredBy,                // ← referrer's UID (empty string if none)
       totalReferrals: 0,
       createdAt: serverTimestamp(),
     })

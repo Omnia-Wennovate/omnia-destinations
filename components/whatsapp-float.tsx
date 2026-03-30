@@ -5,9 +5,9 @@ import { MessageCircle, X } from 'lucide-react'
 
 export function WhatsAppFloat() {
   const [isHovered, setIsHovered] = useState(false)
-  
+
   // WhatsApp number for Omnia Business and Leisure Travel
-  const whatsappNumber = '251941252045' // +251 94 125 2045
+  const whatsappNumber = '251945919293' // +251 94 125 2045
   const message = encodeURIComponent('Hello! I would like to inquire about your travel services.')
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${message}`
 
@@ -23,9 +23,8 @@ export function WhatsAppFloat() {
     >
       {/* Tooltip */}
       <div
-        className={`absolute right-full mr-3 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-lg transition-all duration-300 ${
-          isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
-        }`}
+        className={`absolute right-full mr-3 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-lg transition-all duration-300 ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
+          }`}
       >
         <span>Chat with us on WhatsApp</span>
         <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full">
@@ -37,7 +36,7 @@ export function WhatsAppFloat() {
       <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl">
         {/* Ripple effect */}
         <div className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-20" />
-        
+
         {/* WhatsApp Icon */}
         <svg
           className="h-8 w-8 text-white relative z-10"

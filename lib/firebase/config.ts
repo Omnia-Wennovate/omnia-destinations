@@ -72,24 +72,25 @@ function getFirebaseServices(): Promise<FirebaseServices | null> {
       }
 
       const firestoreModule = {
-        doc:          (...args: any[])              => (firestoreMod.doc as any)(...args),
-        collection:   (...args: any[])              => (firestoreMod.collection as any)(...args),
-        getDoc:       (ref: any)                    => firestoreMod.getDoc(ref),
-        getDocs:      (q: any)                      => firestoreMod.getDocs(q),
-        setDoc:       (ref: any, data: any, o?: any)=> o ? firestoreMod.setDoc(ref, data, o) : firestoreMod.setDoc(ref, data),
-        addDoc:       (col: any, data: any)         => firestoreMod.addDoc(col, data),
-        updateDoc:    (ref: any, data: any)         => firestoreMod.updateDoc(ref, data),
-        deleteDoc:    (ref: any)                    => firestoreMod.deleteDoc(ref),
-        query:        (...args: any[])              => (firestoreMod.query as any)(...args),
-        where:        (...args: any[])              => (firestoreMod.where as any)(...args),
-        orderBy:      (...args: any[])              => (firestoreMod.orderBy as any)(...args),
-        limit:        (n: number)                   => firestoreMod.limit(n),
-        serverTimestamp: ()                         => firestoreMod.serverTimestamp(),
-        arrayUnion:   (...items: any[])             => (firestoreMod.arrayUnion as any)(...items),
-        arrayRemove:  (...items: any[])             => (firestoreMod.arrayRemove as any)(...items),
-        increment:    (n: number)                   => firestoreMod.increment(n),
-        Timestamp:    firestoreMod.Timestamp,
-        FieldValue:   null, // not used in modular SDK
+        doc:             (...args: any[])              => (firestoreMod.doc as any)(...args),
+        collection:      (...args: any[])              => (firestoreMod.collection as any)(...args),
+        getDoc:          (ref: any)                    => firestoreMod.getDoc(ref),
+        getDocs:         (q: any)                      => firestoreMod.getDocs(q),
+        setDoc:          (ref: any, data: any, o?: any)=> o ? firestoreMod.setDoc(ref, data, o) : firestoreMod.setDoc(ref, data),
+        addDoc:          (col: any, data: any)         => firestoreMod.addDoc(col, data),
+        updateDoc:       (ref: any, data: any)         => firestoreMod.updateDoc(ref, data),
+        deleteDoc:       (ref: any)                    => firestoreMod.deleteDoc(ref),
+        query:           (...args: any[])              => (firestoreMod.query as any)(...args),
+        where:           (...args: any[])              => (firestoreMod.where as any)(...args),
+        orderBy:         (...args: any[])              => (firestoreMod.orderBy as any)(...args),
+        limit:           (n: number)                   => firestoreMod.limit(n),
+        onSnapshot:      (...args: any[])              => (firestoreMod.onSnapshot as any)(...args),
+        serverTimestamp: ()                            => firestoreMod.serverTimestamp(),
+        arrayUnion:      (...items: any[])             => (firestoreMod.arrayUnion as any)(...items),
+        arrayRemove:     (...items: any[])             => (firestoreMod.arrayRemove as any)(...items),
+        increment:       (n: number)                   => firestoreMod.increment(n),
+        Timestamp:       firestoreMod.Timestamp,
+        FieldValue:      null, // not used in modular SDK
       }
 
       const storageModule = {

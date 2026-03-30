@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateBookingStatus, updatePaymentStatus } from "@/lib/services/bookings.service";
+import { updateBookingStatusByTxRef, updatePaymentStatusByTxRef } from "@/lib/services/bookings.service";
 
 export async function GET(req: NextRequest) {
   const tx_ref = req.nextUrl.searchParams.get("tx_ref");
@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
     const data = await response.json();
 
     if (data.status === "success" && data.data.status === "success") {
-      await updatePaymentStatus(tx_ref, "paid");
+      await updatePaymentStatusByTxRef(tx_ref, "paid");
 
-      await updateBookingStatus(tx_ref, "completed");
+      await updateBookingStatusByTxRef(tx_ref, "completed");
 
       return NextResponse.redirect(
         new URL("/dashboard?payment=success", req.url)

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
-import { getUserBookings, type FirestoreBooking } from '@/lib/services/bookings.service'
+import { getUserBookings } from '@/lib/services/bookings.service'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,11 +33,43 @@ interface UserProfile {
   name: string
   email: string
   loyaltyPoints: number
+  tier: string
+  totalCoinsEarned: number
+  annualOmniaValue: number
   referralCode: string
   totalReferrals: number
   phone: string
   role: string
   createdAt: any
+}
+
+// ── Tier configuration ─────────────────────────────────────────────────────────
+const TIER_CONFIG = [
+  { name: 'Hope', icon: '⭐', minCoins: 0, minSpend: 0, multiplier: '1x', benefit: '1× coin multiplier on every booking', badgeBg: 'bg-blue-100 dark:bg-blue-950/60', badgeText: 'text-blue-700 dark:text-blue-300', badgeBorder: 'border-blue-300 dark:border-blue-700', bar: 'bg-blue-500' },
+  { name: 'Explorer', icon: '🧭', minCoins: 500, minSpend: 50_000, multiplier: '1.2x', benefit: '1.2× coins — earn 20% more per trip', badgeBg: 'bg-gray-100 dark:bg-gray-800/60', badgeText: 'text-gray-700 dark:text-gray-300', badgeBorder: 'border-gray-300 dark:border-gray-600', bar: 'bg-gray-500' },
+  { name: 'Gold', icon: '👑', minCoins: 1_000, minSpend: 100_000, multiplier: '1.5x', benefit: '1.5× coins — half again more rewards', badgeBg: 'bg-amber-100 dark:bg-amber-950/60', badgeText: 'text-amber-700 dark:text-amber-300', badgeBorder: 'border-amber-300 dark:border-amber-700', bar: 'bg-amber-500' },
+  { name: 'Platinum', icon: '💎', minCoins: 1_500, minSpend: 200_000, multiplier: '2x', benefit: '2× coins + priority support', badgeBg: 'bg-purple-100 dark:bg-purple-950/60', badgeText: 'text-purple-700 dark:text-purple-300', badgeBorder: 'border-purple-300 dark:border-purple-700', bar: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+] as const
+
+function getTierConfig(tier: string) {
+  return TIER_CONFIG.find(t => t.name === tier) ?? TIER_CONFIG[0]
+}
+
+function getTierProgress(tier: string, totalCoinsEarned: number, annualOmniaValue: number) {
+  const currentIdx = TIER_CONFIG.findIndex(t => t.name === tier)
+  if (currentIdx === TIER_CONFIG.length - 1) return null // already Platinum
+  const next = TIER_CONFIG[currentIdx + 1]
+  // Use whichever metric gives the better (higher) progress
+  const coinsPct = next.minCoins > 0 ? Math.min(100, Math.round((totalCoinsEarned / next.minCoins) * 100)) : 100
+  const spendPct = next.minSpend > 0 ? Math.min(100, Math.round((annualOmniaValue / next.minSpend) * 100)) : 100
+  const percent = Math.max(coinsPct, spendPct)
+  const coinsLeft = Math.max(0, next.minCoins - totalCoinsEarned)
+  const spendLeft = Math.max(0, next.minSpend - annualOmniaValue)
+  const parts: string[] = []
+  if (coinsLeft > 0) parts.push(`earn ${coinsLeft.toLocaleString()} more coins`)
+  if (spendLeft > 0) parts.push(`spend ${spendLeft.toLocaleString()} ETB more`)
+  const hint = parts.length > 0 ? `${parts.join(' or ')} to reach ${next.name}` : `You qualify for ${next.name}!`
+  return { nextTier: next.name, nextIcon: next.icon, percent, hint, bar: next.bar }
 }
 
 interface Booking {
@@ -80,116 +112,101 @@ export default function DashboardPage() {
     }
   }, [isInitialized, isAuthenticated, user, router])
 
-  // Fetch user data from Firestore
+  // Real-time listener: users/{uid} → profile (tier, loyaltyPoints, etc.)
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
 
-    async function fetchData() {
-      try {
-        setLoading(true)
-        const db = await getFirebaseDb()
-        const modules = await getFirebaseModules()
-        
-        // Fetch user profile
-        if (db && modules.firestore) {
-          const { doc, getDoc, collection, query, where, orderBy, getDocs } = modules.firestore
-          
-          try {
-            const userDocRef = doc(db, 'users', user!.id)
-            const userDocSnap = await getDoc(userDocRef)
-            if (userDocSnap.exists()) {
-              const data = userDocSnap.data()
-              setProfile({
-                name: data.name || `${user!.firstName} ${user!.lastName}`,
-                email: data.email || user!.email,
-                loyaltyPoints: data.loyaltyPoints || 0,
-                referralCode: data.referralCode || '------',
-                totalReferrals: data.totalReferrals || 0,
-                phone: data.phone || '',
-                role: data.role || 'USER',
-                createdAt: data.createdAt,
-              })
-            } else {
-              // Fallback to store data
-              setProfile({
-                name: `${user!.firstName} ${user!.lastName}`.trim(),
-                email: user!.email,
-                loyaltyPoints: 0,
-                referralCode: '------',
-                totalReferrals: 0,
-                phone: '',
-                role: 'USER',
-                createdAt: null,
-              })
-            }
-          } catch {
-            setProfile({
-              name: `${user!.firstName} ${user!.lastName}`.trim(),
-              email: user!.email,
-              loyaltyPoints: 0,
-              referralCode: '------',
-              totalReferrals: 0,
-              phone: '',
-              role: 'USER',
-              createdAt: null,
-            })
-          }
+    let unsubscribeProfile: (() => void) | null = null
 
-          // Fetch bookings using the service
-        try {
-  const firestoreBookings = await getUserBookings(user!.id)
+    async function subscribeToProfile() {
+      const db = await getFirebaseDb()
+      const modules = await getFirebaseModules()
+      if (!db || !modules.firestore) {
+        // Fallback when Firebase not available
+        setProfile({
+          name: `${user!.firstName} ${user!.lastName}`.trim(),
+          email: user!.email,
+          loyaltyPoints: 0,
+          tier: 'Hope',
+          totalCoinsEarned: 0,
+          annualOmniaValue: 0,
+          referralCode: '------',
+          totalReferrals: 0,
+          phone: '',
+          role: 'USER',
+          createdAt: null,
+        })
+        return
+      }
 
-  const bookingsList: Booking[] = firestoreBookings.map((b) => ({
-    id: b.id,
-    tourTitle: b.packageTitle || b.tourTitle || "Unknown Package",
-    travelDate: b.travelDate || "",
-    createdAt: b.createdAt,
-    guests: b.guests || 1,
-    amount: b.totalAmount || b.amount || 0,
-    status: b.bookingStatus || "pending",
-    paymentStatus: b.paymentStatus || "unpaid",
-  }))
+      const { doc, onSnapshot } = modules.firestore
+      const userDocRef = doc(db, 'users', user!.id)
 
-  setBookings(bookingsList)
-} catch (error) {
-  console.error("Error loading bookings:", error)
-}
-
-          // Fetch rewards for this user
-          try {
-            const rewardsQuery = query(
-              collection(db, 'rewards'),
-              where('userId', '==', user!.id),
-              orderBy('createdAt', 'desc')
-            )
-            const rewardsSnap = await getDocs(rewardsQuery)
-            const rewardsList: Reward[] = []
-            rewardsSnap.forEach((d: any) => {
-              const data = d.data()
-              rewardsList.push({
-                id: d.id,
-                points: data.points || 0,
-                type: data.type || 'loyalty',
-                reason: data.reason || '',
-                createdAt: data.createdAt,
-              })
-            })
-            setRewards(rewardsList)
-          } catch {
-            setRewards([])
-          }
+      unsubscribeProfile = onSnapshot(userDocRef, (snap: any) => {
+        if (snap.exists()) {
+          const data = snap.data()
+          console.log('[Dashboard] user.tier:', data.tier)
+          setProfile({
+            name: data.name || `${user!.firstName} ${user!.lastName}`,
+            email: data.email || user!.email,
+            loyaltyPoints: data.loyaltyPoints ?? 0,
+            tier: data.tier ?? 'Hope',
+            totalCoinsEarned: data.totalCoinsEarned ?? 0,
+            annualOmniaValue: data.annualOmniaValue ?? 0,
+            referralCode: data.referralCode || '------',
+            totalReferrals: data.totalReferrals ?? 0,
+            phone: data.phone || '',
+            role: data.role || 'USER',
+            createdAt: data.createdAt,
+          })
         } else {
-          // Fallback when Firebase not available
           setProfile({
             name: `${user!.firstName} ${user!.lastName}`.trim(),
             email: user!.email,
             loyaltyPoints: 0,
+            tier: 'Hope',
+            totalCoinsEarned: 0,
+            annualOmniaValue: 0,
             referralCode: '------',
             totalReferrals: 0,
             phone: '',
             role: 'USER',
             createdAt: null,
           })
+        }
+      }, (err: any) => {
+        console.error('[Dashboard] profile listener error:', err)
+      })
+    }
+
+    subscribeToProfile()
+    return () => { if (unsubscribeProfile) unsubscribeProfile() }
+  }, [isInitialized, isAuthenticated, user])
+
+  // Fetch user data from Firestore (bookings only — profile and rewards use onSnapshot above)
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user) return
+
+    async function fetchData() {
+      try {
+        setLoading(true)
+
+        // Fetch bookings using the service
+        try {
+          const firestoreBookings = await getUserBookings(user!.id)
+          const bookingsList: Booking[] = firestoreBookings.map((b) => ({
+            id: b.id,
+            tourTitle: b.packageTitle || b.tourTitle || 'Unknown Package',
+            travelDate: b.travelDate || '',
+            createdAt: b.createdAt,
+            guests: b.guests || 1,
+            amount: b.totalAmount || b.amount || 0,
+            status: b.bookingStatus || 'pending',
+            paymentStatus: b.paymentStatus || 'unpaid',
+          }))
+          setBookings(bookingsList)
+        } catch (error) {
+          console.error('[Dashboard] Error loading bookings:', error)
         }
       } catch {
         // Errors handled per-section above
@@ -199,6 +216,49 @@ export default function DashboardPage() {
     }
 
     fetchData()
+  }, [isInitialized, isAuthenticated, user])
+
+
+
+  // Real-time listener: users/{uid}/coinsHistory → Rewards History section
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user) return
+
+    let unsubscribe: (() => void) | null = null
+
+    async function subscribeToHistory() {
+      const db = await getFirebaseDb()
+      const modules = await getFirebaseModules()
+      if (!db || !modules.firestore) return
+
+      const { collection, query, orderBy, onSnapshot } = modules.firestore
+      const histRef = query(
+        collection(db, 'users', user!.id, 'coinsHistory'),
+        orderBy('createdAt', 'desc')
+      )
+
+      unsubscribe = onSnapshot(histRef, (snap: any) => {
+        const list: Reward[] = []
+        snap.forEach((d: any) => {
+          const data = d.data()
+          list.push({
+            id: d.id,
+            points: data.amount ?? 0,
+            type: data.type || 'booking',
+            reason: data.reason || data.relatedBookingId || '—',
+            createdAt: data.createdAt,
+          })
+        })
+        console.log('[Dashboard] coinsHistory length:', list.length)
+        setRewards(list)
+      }, (err: any) => {
+        console.error('[Dashboard] coinsHistory listener error:', err)
+        setRewards([])
+      })
+    }
+
+    subscribeToHistory()
+    return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
 
   const handleLogout = async () => {
@@ -331,6 +391,46 @@ export default function DashboardPage() {
                     <p className="text-sm text-muted-foreground">Loyalty Points</p>
                   </div>
                   <p className="text-2xl font-bold text-foreground">{profile?.loyaltyPoints.toLocaleString() || 0}</p>
+
+                  {/* ── Enhanced Tier Display ─────────────────────────────── */}
+                  {profile && (() => {
+                    const cfg = getTierConfig(profile.tier)
+                    const progress = getTierProgress(profile.tier, profile.totalCoinsEarned, profile.annualOmniaValue)
+                    return (
+                      <div className="mt-3 space-y-2.5" style={{ animation: 'tierFadeIn 0.5s ease-out' }}>
+                        {/* Tier Badge */}
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} transition-all duration-300`}>
+                          <span role="img" aria-label={cfg.name}>{cfg.icon}</span>
+                          <span>{cfg.name} Member</span>
+                        </div>
+
+                        {/* Benefit text */}
+                        <p className="text-xs text-muted-foreground leading-snug">{cfg.benefit}</p>
+
+                        {/* Progress bar */}
+                        {progress && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-muted-foreground">Progress to {progress.nextIcon} {progress.nextTier}</span>
+                              <span className="text-xs font-semibold text-foreground">{progress.percent}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-1.5 rounded-full ${progress.bar} transition-all duration-700`}
+                                style={{ width: `${progress.percent}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-snug">{progress.hint}</p>
+                          </div>
+                        )}
+                        {!progress && (
+                          <p className="text-xs font-medium text-purple-600 dark:text-purple-400">🏆 Maximum tier reached!</p>
+                        )}
+                      </div>
+                    )
+                  })()
+                  }
+                  <style>{`@keyframes tierFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
                 </CardContent>
               </Card>
 
@@ -515,11 +615,10 @@ export default function DashboardPage() {
                         className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${
-                            reward.type === 'referral'
+                          <div className={`p-2 rounded-lg ${reward.type === 'referral'
                               ? 'bg-blue-50 dark:bg-blue-950/50'
                               : 'bg-amber-50 dark:bg-amber-950/50'
-                          }`}>
+                            }`}>
                             {reward.type === 'referral' ? (
                               <Share2 className="h-4 w-4 text-blue-500" />
                             ) : (

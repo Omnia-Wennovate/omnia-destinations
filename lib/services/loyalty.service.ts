@@ -221,70 +221,66 @@ export async function writeCoinTransaction(params: {
 export async function awardBookingCoins(bookingId: string) {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-
   if (!db || !modules.firestore) return;
 
-  const {
-    doc,
-    getDoc,
-    updateDoc,
-    increment,
-    addDoc,
-    collection,
-    serverTimestamp,
-  } = modules.firestore;
+  const { doc, getDoc, updateDoc, increment, serverTimestamp } = modules.firestore;
 
   const bookingRef = doc(db, "bookings", bookingId);
   const bookingSnap = await getDoc(bookingRef);
-
-  if (!bookingSnap.exists()) {
-    console.log("Booking not found");
-    return;
-  }
+  if (!bookingSnap.exists()) { console.log("[awardBookingCoins] Booking not found:", bookingId); return; }
 
   const booking = bookingSnap.data() as any;
+  console.log("[awardBookingCoins] Booking data:", booking);
 
-  console.log("BOOKING DATA:", booking);
-
-  const userId = booking.userId;
-  const value = booking.omniaServiceValue || 0;
-  const paymentStatus = booking.paymentStatus;
-
-  if (!userId) {
-    console.log("Missing userId");
+  // Idempotency guard
+  if (booking.coinsStatus === "awarded") {
+    console.log("[awardBookingCoins] Coins already awarded for booking:", bookingId);
     return;
   }
 
-  if (paymentStatus !== "paid") {
-    console.log("Payment not paid:", paymentStatus);
-    return;
-  }
+  const userId: string = booking.userId;
+  const value: number = booking.omniaServiceValue || 0;
 
-  const coins = Math.floor(value / 1000);
+  if (!userId) { console.log("[awardBookingCoins] Missing userId"); return; }
+  if (booking.paymentStatus !== "paid") { console.log("[awardBookingCoins] Payment not paid:", booking.paymentStatus); return; }
 
-  console.log("COINS:", coins);
+  // Resolve current tier for multiplier
+  const userSnap = await getDoc(doc(db, "users", userId));
+  const userData = userSnap.exists() ? (userSnap.data() as any) : {};
+  const currentTier: TierName = userData.tier ?? "Hope";
 
-  const userRef = doc(db, "users", userId);
+  // Calculate coins via official helpers (respects tier multiplier)
+  const coins = calculateBookingCoins(value, currentTier);
+  console.log("[awardBookingCoins] Coins to award:", coins, "tier:", currentTier);
 
-  await updateDoc(userRef, {
-    loyaltyPoints: increment(coins),
-    totalCoinsEarned: increment(coins),
-    annualOmniaValue: increment(value),
-  });
-
-  await addDoc(collection(db, "users", userId, "coinsHistory"), {
+  // Always go through writeCoinTransaction — writes coinsHistory with full schema
+  await writeCoinTransaction({
+    userId,
     amount: coins,
     type: "booking",
-    bookingId,
-    createdAt: serverTimestamp(),
+    relatedBookingId: bookingId,
+    reason: `Booking coins: ${booking.packageTitle ?? bookingId} (${value.toLocaleString()} ETB Omnia value)`,
+    tierAtTime: currentTier,
+    multiplierApplied: getTierMultiplier(currentTier),
+    status: "active",
+  });
+
+  // Update annualOmniaValue (not handled by writeCoinTransaction)
+  await updateDoc(doc(db, "users", userId), {
+    annualOmniaValue: increment(value),
+    updatedAt: serverTimestamp(),
   });
 
   await updateDoc(bookingRef, {
     coinsStatus: "awarded",
     coinsEarned: coins,
+    updatedAt: serverTimestamp(),
   });
 
-  console.log("LOYALTY AWARDED");
+  console.log("[awardBookingCoins] LOYALTY AWARDED:", coins, "coins to", userId);
+
+  // Auto-evaluate and upgrade tier after awarding coins
+  await evaluateAndUpgradeTier(userId);
 }
 
 /**

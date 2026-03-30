@@ -1,5 +1,5 @@
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
-import { awardBookingCoins, reverseBookingCoins } from "@/lib/services/loyalty.service";
+import { awardBookingCoins, reverseBookingCoins, awardReferralCoins } from "@/lib/services/loyalty.service";
 
 export interface FirestoreBooking {
   id: string;
@@ -250,9 +250,42 @@ export async function markAsRefunded(
   await reverseBookingCoins(bookingId);
 }
 
+// Internal helper: award referral coins to the referrer if the booking user was referred
+async function tryAwardReferralCoins(bookingId: string): Promise<void> {
+  const db = await getFirebaseDb()
+  const modules = await getFirebaseModules()
+  if (!db || !modules.firestore) return
+
+  const { doc, getDoc } = modules.firestore
+  try {
+    const bookingSnap = await getDoc(doc(db, "bookings", bookingId))
+    if (!bookingSnap.exists()) return
+    const booking = bookingSnap.data() as any
+    const userId: string = booking.userId
+    if (!userId) return
+
+    const userSnap = await getDoc(doc(db, "users", userId))
+    if (!userSnap.exists()) return
+    const userData = userSnap.data() as any
+    const referredBy: string = userData.referredBy || ''
+    if (!referredBy) return // user was not referred
+
+    console.log('[tryAwardReferralCoins] Awarding referral coins to referrer:', referredBy)
+    await awardReferralCoins({
+      referrerId: referredBy,
+      referredUserId: userId,
+      referralType: 'individual',
+      relatedBookingId: bookingId,
+    })
+  } catch (err) {
+    console.error('[tryAwardReferralCoins] Error:', err)
+    // Non-fatal — don't block the main flow
+  }
+}
+
 // Update booking status (admin)
 export async function updateBookingStatus(
-  tx_ref: string,
+  bookingId: string,
   bookingStatus: "confirmed" | "pending" | "cancelled" | "completed"
 ): Promise<void> {
   const db = await getFirebaseDb();
@@ -262,40 +295,57 @@ export async function updateBookingStatus(
     throw new Error("Database not initialized");
   }
 
-  const {
-    collection,
-    query,
-    where,
-    getDocs,
-    updateDoc,
-    serverTimestamp,
-  } = modules.firestore;
+  const { doc, updateDoc, serverTimestamp } = modules.firestore;
 
-  const q = query(
-    collection(db, "bookings"),
-    where("tx_ref", "==", tx_ref)
-  );
-
-  const snapshot = await getDocs(q);
-
-  if (snapshot.empty) {
-    throw new Error("Booking not found");
-  }
-
-  const bookingDoc = snapshot.docs[0];
-
-  await updateDoc(bookingDoc.ref, {
+  await updateDoc(doc(db, "bookings", bookingId), {
     bookingStatus,
     updatedAt: serverTimestamp(),
   });
 
-  const bookingId = bookingDoc.id;
-
   if (bookingStatus === "completed" || bookingStatus === "confirmed") {
     await awardBookingCoins(bookingId);
+    await tryAwardReferralCoins(bookingId);
   } else if (bookingStatus === "cancelled") {
     await reverseBookingCoins(bookingId);
   }
+}
+
+export async function updateBookingStatusByTxRef(
+  tx_ref: string,
+  bookingStatus: "confirmed" | "pending" | "cancelled" | "completed"
+): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+
+  if (!db || !modules.firestore) throw new Error("Database not initialized");
+
+  const { collection, query, where, getDocs } = modules.firestore;
+  const q = query(collection(db, "bookings"), where("tx_ref", "==", tx_ref));
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) throw new Error("Booking not found");
+  
+  const bookingId = snapshot.docs[0].id;
+  return updateBookingStatus(bookingId, bookingStatus);
+}
+
+export async function updatePaymentStatusByTxRef(
+  tx_ref: string,
+  paymentStatus: "paid" | "pending" | "refunded" | "failed"
+): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+
+  if (!db || !modules.firestore) throw new Error("Database not initialized");
+
+  const { collection, query, where, getDocs } = modules.firestore;
+  const q = query(collection(db, "bookings"), where("tx_ref", "==", tx_ref));
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) throw new Error("Booking not found");
+  
+  const bookingId = snapshot.docs[0].id;
+  return updatePaymentStatus(bookingId, paymentStatus);
 }
 
 // Update payment status (admin)
@@ -319,6 +369,7 @@ export async function updatePaymentStatus(
 
   if (paymentStatus === "paid") {
     await awardBookingCoins(bookingId);
+    await tryAwardReferralCoins(bookingId);
   } else if (paymentStatus === "refunded") {
     await reverseBookingCoins(bookingId);
   }
