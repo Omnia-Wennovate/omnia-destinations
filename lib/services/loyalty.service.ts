@@ -194,6 +194,7 @@ export async function writeCoinTransaction(params: {
     expiresAt,
     status: params.status ?? (params.amount >= 0 ? "active" : "reversed"),
   });
+  console.log("[writeCoinTransaction] coinsHistory written:", txRef.id, "amount:", params.amount, "type:", params.type);
 
   // Update user balance
   if (params.updateBalance !== false) {
@@ -205,7 +206,11 @@ export async function writeCoinTransaction(params: {
     if (isEarnType) {
       userUpdate.totalCoinsEarned = increment(params.amount);
     }
-    await updateDoc(doc(db, "users", params.userId), userUpdate);
+    const { setDoc } = modules.firestore;
+    await setDoc(doc(db, "users", params.userId), userUpdate, { merge: true });
+    console.log("[writeCoinTransaction] user balance updated for:", params.userId, "by:", params.amount);
+  } else {
+    console.log("[writeCoinTransaction] updateBalance=false, skipping balance update");
   }
 
   return txRef.id;

@@ -8,14 +8,30 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Custom claim — set server-side:
-    // admin.auth().setCustomUserClaims(uid, { role: "admin" })
+    // Check custom claim first (set server-side), then fall back to
+    // the /admins/{uid} document so the app works without server-side
+    // claim provisioning.
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.role == "admin";
+      return isAuthenticated() && (
+        request.auth.token.role == "admin" ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
     }
 
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ── admins ────────────────────────────────────────────────────────────
+    // Readable by any authenticated user (needed for the get() call above
+    // which runs in security rule evaluation context).  Only admins can
+    // write this collection.
+
+    match /admins/{adminId} {
+      allow read:   if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // ── users ─────────────────────────────────────────────────────────────

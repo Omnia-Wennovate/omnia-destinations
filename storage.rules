@@ -8,9 +8,14 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Matches custom claim set via: admin.auth().setCustomUserClaims(uid, { role: "admin" })
+    // Check custom claim first (set server-side), then fall back to
+    // the /admins/{uid} Firestore document so the app works without
+    // server-side claim provisioning.
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.role == "admin";
+      return isAuthenticated() && (
+        request.auth.token.role == "admin" ||
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+      );
     }
 
     function isImage() {

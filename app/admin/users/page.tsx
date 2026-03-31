@@ -46,6 +46,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 
 // ── Role Badge ─────────────────────────────────────────────────
 function RoleBadge({ role }: { role: string }) {
@@ -188,7 +189,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  // ── Loyalty logic ────────────────────────────────────────────
   function openLoyaltyDialog(u: FirestoreUser) {
     setLoyaltyTarget(u)
     setLoyaltyAmount('')
@@ -213,11 +213,14 @@ export default function AdminUsersPage() {
             : u,
         ),
       )
+      toast.success(
+        `Successfully ${loyaltyMode === 'subtract' ? 'subtracted' : 'added'} ${parsed} points ${loyaltyMode === 'subtract' ? 'from' : 'to'} ${loyaltyTarget.name}`
+      )
       setLoyaltyDialogOpen(false)
       setLoyaltyTarget(null)
       setLoyaltyAmount('')
-    } catch {
-      // silent
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to adjust loyalty points')
     } finally {
       setAdjustingPoints(false)
     }

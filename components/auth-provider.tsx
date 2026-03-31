@@ -14,7 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const auth = await getFirebaseAuth()
       const db = await getFirebaseDb()
       const modules = await getFirebaseModules()
-      
+
       if (!auth || !modules.auth) {
         setInitialized(true)
         return
@@ -27,36 +27,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           try {
             if (db && doc && getDoc) {
-              const userDocRef = doc(db, 'users', firebaseUser.uid)
-              const userDocSnap = await getDoc(userDocRef)
+              const userDocRef  = doc(db, 'users',  firebaseUser.uid)
+              const adminDocRef = doc(db, 'admins', firebaseUser.uid)
+
+              // Read user profile and admin membership in parallel
+              const [userDocSnap, adminDocSnap] = await Promise.all([
+                getDoc(userDocRef),
+                getDoc(adminDocRef),
+              ])
+
               const userData = userDocSnap.exists() ? userDocSnap.data() : null
+              // /admins/{uid} existence is the single source of truth for ADMIN role
+              const role = adminDocSnap.exists() ? 'ADMIN' : (userData?.role || 'USER')
 
               setUser({
-                id: firebaseUser.uid,
-                email: firebaseUser.email || '',
-                firstName: userData?.name?.split(' ')[0] || firebaseUser.displayName?.split(' ')[0] || '',
-                lastName: userData?.name?.split(' ').slice(1).join(' ') || firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
-                role: userData?.role || 'USER',
-                photoURL: firebaseUser.photoURL || '',
+                id:        firebaseUser.uid,
+                email:     firebaseUser.email || '',
+                firstName: userData?.name?.split(' ')[0]                 || firebaseUser.displayName?.split(' ')[0]                 || '',
+                lastName:  userData?.name?.split(' ').slice(1).join(' ') || firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+                role,
+                photoURL:  firebaseUser.photoURL || '',
               })
             } else {
               setUser({
-                id: firebaseUser.uid,
-                email: firebaseUser.email || '',
+                id:        firebaseUser.uid,
+                email:     firebaseUser.email || '',
                 firstName: firebaseUser.displayName || '',
-                lastName: '',
-                role: 'USER',
-                photoURL: firebaseUser.photoURL || '',
+                lastName:  '',
+                role:      'USER',
+                photoURL:  firebaseUser.photoURL || '',
               })
             }
           } catch {
             setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
+              id:        firebaseUser.uid,
+              email:     firebaseUser.email || '',
               firstName: firebaseUser.displayName || '',
-              lastName: '',
-              role: 'USER',
-              photoURL: firebaseUser.photoURL || '',
+              lastName:  '',
+              role:      'USER',
+              photoURL:  firebaseUser.photoURL || '',
             })
           }
         } else {
