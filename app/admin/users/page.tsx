@@ -205,7 +205,7 @@ export default function AdminUsersPage() {
 
     try {
       setAdjustingPoints(true)
-      await adjustLoyaltyPoints(loyaltyTarget.id, actualAmount)
+      await adjustLoyaltyPoints(loyaltyTarget.id, actualAmount, user?.id ?? 'admin', 'Manual adjustment by admin')
       setUsers((prev) =>
         prev.map((u) =>
           u.id === loyaltyTarget.id
