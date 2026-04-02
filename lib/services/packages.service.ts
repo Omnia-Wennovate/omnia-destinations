@@ -1,4 +1,6 @@
 import { getFirebaseDb, getFirebaseStorage, getFirebaseModules } from "@/lib/firebase/config";
+import { PACKAGES } from "@/lib/data/packages";
+import { TOURS } from "@/lib/data/tours";
 
 export interface PackageData {
   id: string;
@@ -233,12 +235,75 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
 export async function getPackageById(packageId: string): Promise<PackageData | null> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  if (!db || !modules.firestore) return null;
+  
+  if (db && modules.firestore) {
+    const { doc, getDoc, collection, query, where, limit, getDocs } = modules.firestore;
+    try {
+      // 1. Try fetching by ID
+      const snap = await getDoc(doc(db, "packages", packageId));
+      if (snap.exists()) {
+        return { id: snap.id, ...snap.data() } as PackageData;
+      }
 
-  const { doc, getDoc } = modules.firestore;
-  const snap = await getDoc(doc(db, "packages", packageId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as PackageData;
+      // 2. Fallback: try fetching by slug
+      const slugQuery = query(collection(db, "packages"), where("slug", "==", packageId), limit(1));
+      const slugSnap = await getDocs(slugQuery);
+      if (!slugSnap.empty) {
+        const d = slugSnap.docs[0];
+        return { id: d.id, ...d.data() } as PackageData;
+      }
+    } catch (e) {
+      console.error("Error fetching package from Firestore:", e);
+    }
+  }
+
+  // Fallback to static packages
+  const staticPkg = PACKAGES.find((p) => p.id === packageId);
+  if (staticPkg) {
+    return {
+      id: staticPkg.id,
+      title: staticPkg.title,
+      slug: staticPkg.id,
+      shortDescription: staticPkg.description || '',
+      fullDescription: staticPkg.description || '',
+      singlePrice: staticPkg.singlePrice,
+      sharingPrice: staticPkg.sharingPrice,
+      duration: parseInt(staticPkg.duration.toString()) || 1,
+      location: staticPkg.location,
+      category: '',
+      includedServices: staticPkg.included || [],
+      excludedServices: staticPkg.excluded || [],
+      status: 'published',
+      featuredImageURL: staticPkg.image,
+      galleryImageURLs: staticPkg.gallery || [],
+      videoURL: staticPkg.videoUrl || '',
+    };
+  }
+
+  // Fallback to static tours
+  const staticTour = TOURS.find((t) => t.id === packageId);
+  if (staticTour) {
+    return {
+      id: staticTour.id,
+      title: staticTour.title,
+      slug: staticTour.id,
+      shortDescription: staticTour.description || '',
+      fullDescription: staticTour.description || '',
+      singlePrice: staticTour.price || 0,
+      sharingPrice: staticTour.price || 0,
+      duration: parseInt(staticTour.duration.toString()) || 1,
+      location: staticTour.location,
+      category: '',
+      includedServices: staticTour.included || [],
+      excludedServices: staticTour.excluded || [],
+      status: 'published',
+      featuredImageURL: staticTour.image,
+      galleryImageURLs: staticTour.gallery || [],
+      videoURL: staticTour.videoUrl || '',
+    };
+  }
+
+  return null;
 }
 
 // Fetch full package by slug (used on detail page - lazy loaded)
