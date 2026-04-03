@@ -6,7 +6,7 @@ function generateReferralCode() {
   for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return code;
+  return "OM" + code;
 }
 
 export interface SocialAuthResult {

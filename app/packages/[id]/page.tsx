@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, notFound } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { getPackageBySlug, type PackageData } from '@/lib/services/packages.service'
+import { getPackageById, type PackageData } from '@/lib/services/packages.service'
 import { PACKAGES } from '@/lib/data/packages'
 import { TourDetailClient } from '@/components/tour-detail-client'
 import { useRouteGuard } from '@/hooks/use-route-guard'
@@ -30,8 +30,8 @@ export default function PackageDetailPage() {
       try {
         setLoading(true)
 
-        // 🔹 Fetch from Firestore
-        const firestorePkg = await getPackageBySlug(id)
+        // 🔹 Fetch from Firestore - supports both ID and Slug
+        const firestorePkg = await getPackageById(id)
 
         if (firestorePkg) {
           setPackageData(firestorePkg)

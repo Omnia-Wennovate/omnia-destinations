@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { 
   MapPin, 
   Clock, 
@@ -23,14 +24,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
 import { BookingDialog } from '@/components/booking-dialog'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/auth'
+import { addToFavorites, removeFromFavorites, checkIsFavorite } from '@/lib/services/favorites.service'
 
 interface TourDetailClientProps {
   tour: Tour
 }
 
 export function TourDetailClient({ tour }: TourDetailClientProps) {
+  const router = useRouter()
+  const { user, isAuthenticated, isInitialized } = useAuthStore()
+  
   const [selectedMedia, setSelectedMedia] = useState(0)
   const [showVideo, setShowVideo] = useState(false)
+  
+  const [isFavorite, setIsFavorite] = useState(false)
+  const [isFavoriteLoading, setIsFavoriteLoading] = useState(true)
+
   const images = tour.gallery || [tour.image]
   
   // Create media array with images and video
@@ -41,6 +51,46 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
 
   const currentMedia = mediaItems[selectedMedia]
   const isVideoSelected = currentMedia?.type === 'video'
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    if (isAuthenticated && user) {
+      checkIsFavorite(user.id, tour.id)
+        .then((fav) => setIsFavorite(fav))
+        .catch((err) => console.error("Error checking favorite status:", err))
+        .finally(() => setIsFavoriteLoading(false));
+    } else {
+      setIsFavoriteLoading(false);
+    }
+  }, [isInitialized, isAuthenticated, user, tour.id]);
+
+  const toggleFavorite = async () => {
+    if (!isAuthenticated || !user) {
+      router.push(`/login?redirect=/packages/${tour.id}`);
+      return;
+    }
+    
+    try {
+      setIsFavoriteLoading(true);
+      if (isFavorite) {
+        await removeFromFavorites(user.id, tour.id);
+        setIsFavorite(false);
+      } else {
+        await addToFavorites(user.id, {
+          packageId: tour.id,
+          title: tour.title,
+          featuredImageURL: tour.image || '',
+          price: tour.singlePrice || 0,
+        });
+        setIsFavorite(true);
+      }
+    } catch (e) {
+      console.error("Failed to toggle favorite:", e);
+    } finally {
+      setIsFavoriteLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -363,6 +413,27 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                     Book Now
                   </Button>
                 </BookingDialog>
+                
+                {/* Favorite Button */}
+                <Button 
+                  variant="outline" 
+                  size="lg"
+                  className="w-full flex items-center justify-center gap-2 transition-colors duration-300 border-border bg-transparent hover:bg-secondary" 
+                  onClick={toggleFavorite}
+                  disabled={isFavoriteLoading || !isInitialized}
+                >
+                  {isFavorite ? (
+                    <>
+                      <Heart className="h-5 w-5 fill-red-500 text-red-500" />
+                      Saved to Favorites
+                    </>
+                  ) : (
+                    <>
+                      <Heart className="h-5 w-5 text-muted-foreground" />
+                      Save to Favorites
+                    </>
+                  )}
+                </Button>
 
                 <p className="text-xs text-center text-muted-foreground">
                   Free cancellation up to 24 hours before departure

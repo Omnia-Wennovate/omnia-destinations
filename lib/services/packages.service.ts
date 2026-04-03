@@ -235,7 +235,7 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
 export async function getPackageById(packageId: string): Promise<PackageData | null> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (db && modules.firestore) {
     const { doc, getDoc, collection, query, where, limit, getDocs } = modules.firestore;
     try {

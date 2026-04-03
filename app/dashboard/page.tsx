@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
 import { getUserBookings } from '@/lib/services/bookings.service'
+import { removeFromFavorites, type FavoritePackage } from '@/lib/services/favorites.service'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ import {
   Loader2,
   Plane,
   Download,
+  Heart,
+  Trash2,
 } from 'lucide-react'
 
 
@@ -98,6 +101,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
+  const [favorites, setFavorites] = useState<FavoritePackage[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
@@ -260,6 +264,51 @@ export default function DashboardPage() {
     subscribeToHistory()
     return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
+
+  // Real-time listener: users/{uid}/favorites → Favorites section
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user) return
+
+    let unsubscribe: (() => void) | null = null
+
+    async function subscribeToFavorites() {
+      const db = await getFirebaseDb()
+      const modules = await getFirebaseModules()
+      if (!db || !modules.firestore) return
+
+      const { collection, onSnapshot } = modules.firestore
+      const favRef = collection(db, 'users', user!.id, 'favorites')
+
+      unsubscribe = onSnapshot(favRef, (snap: any) => {
+        const list: FavoritePackage[] = []
+        snap.forEach((d: any) => {
+          list.push(d.data() as FavoritePackage)
+        })
+        // sort locally by addedAt desc
+        list.sort((a, b) => {
+          const timeA = a.addedAt?.toMillis?.() || 0
+          const timeB = b.addedAt?.toMillis?.() || 0
+          return timeB - timeA
+        })
+        setFavorites(list)
+      }, (err: any) => {
+        console.error('[Dashboard] favorites listener error:', err)
+        setFavorites([])
+      })
+    }
+
+    subscribeToFavorites()
+    return () => { if (unsubscribe) unsubscribe() }
+  }, [isInitialized, isAuthenticated, user])
+
+  const handleRemoveFavorite = async (packageId: string) => {
+    if (!user) return;
+    try {
+      await removeFromFavorites(user.id, packageId);
+    } catch (error) {
+      console.error('[Dashboard] Error removing favorite:', error);
+    }
+  }
 
   const handleLogout = async () => {
     try {
@@ -500,6 +549,82 @@ export default function DashboardPage() {
                     Download Loyalty Program PDF
                   </a>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Favorites Section */}
+            <Card className="border-border/50 mb-8">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                      <Heart className="h-5 w-5 text-red-500 fill-red-500" />
+                      Favorite Packages
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      {favorites.length} saved package{favorites.length !== 1 ? 's' : ''}
+                    </CardDescription>
+                  </div>
+                  <Link href="/tours">
+                    <Button variant="outline" size="sm" className="bg-transparent">
+                      Discover More
+                    </Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {favorites.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Heart className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                    <p className="text-muted-foreground font-medium">No favorites yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Packages you save will appear here</p>
+                    <Link href="/tours">
+                      <Button className="mt-4">Explore Packages</Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {favorites.map((fav) => (
+                      <div key={fav.packageId} className="group relative overflow-hidden rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 transition-colors">
+                        <div className="aspect-video w-full overflow-hidden relative">
+                          <img 
+                            src={fav.featuredImageURL || '/placeholder.svg'} 
+                            alt={fav.title}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute top-2 right-2">
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveFavorite(fav.packageId)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <Link href={`/packages/${fav.packageId}`}>
+                            <h3 className="font-semibold text-foreground hover:text-primary transition-colors line-clamp-1">
+                              {fav.title}
+                            </h3>
+                          </Link>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">From</span>
+                            <span className="font-bold text-primary">${fav.price}</span>
+                          </div>
+                          <div className="mt-4">
+                            <Link href={`/packages/${fav.packageId}`} className="block">
+                              <Button className="w-full" variant="outline" size="sm">
+                                View Details
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

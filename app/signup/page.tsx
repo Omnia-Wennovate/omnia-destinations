@@ -91,7 +91,7 @@ export default function SignupPage() {
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length))
     }
-    return code
+    return 'OM' + code
   }
 
 const onSubmit = async (data: SignupFormData) => {
