@@ -70,6 +70,29 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     throw new Error("Selected date is outside the package availability.");
   }
 
+  // 1a. Enforce booking people limit (1–10)
+  if (!Number.isInteger(data.guests) || data.guests < 1 || data.guests > 10) {
+    throw new Error("You can only book between 1 and 10 people per package.");
+  }
+
+  // 1b. Enforce per-package booking limit (max 10 bookings per user per package)
+  const { query, where, getDocs } = modules.firestore;
+  const packageBookingsSnap = await getDocs(
+    query(
+      collection(db, "bookings"),
+      where("userId", "==", data.userId),
+      where("packageId", "==", data.packageId)
+    )
+  );
+  const activePackageBookings = packageBookingsSnap.docs.filter(
+    (d: any) => d.data().bookingStatus !== "cancelled"
+  );
+  if (activePackageBookings.length >= 10) {
+    throw new Error(
+      "You have reached the maximum booking limit (10) for this package."
+    );
+  }
+
   // 2. Overlap detection
   const newDuration = pkg.duration > 0 ? pkg.duration : 1;
   const newStart = new Date(data.travelDate);

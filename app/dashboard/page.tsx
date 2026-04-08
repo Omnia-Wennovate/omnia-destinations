@@ -1,11 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
 import { getUserBookings } from '@/lib/services/bookings.service'
 import { removeFromFavorites, type FavoritePackage } from '@/lib/services/favorites.service'
+import {
+  uploadPassportFile,
+  savePassportData,
+  getPassportData,
+  calcDaysLeft,
+  getPassportStatus,
+  type PassportData,
+} from '@/lib/services/passport.service'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +37,10 @@ import {
   Download,
   Heart,
   Trash2,
+  ShieldCheck,
+  Upload,
+  FileText,
+  ExternalLink,
 } from 'lucide-react'
 
 
@@ -104,6 +116,16 @@ export default function DashboardPage() {
   const [favorites, setFavorites] = useState<FavoritePackage[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+
+  // ── Passport state ──────────────────────────────────────────────────────
+  const [passport, setPassport] = useState<PassportData | null>(null)
+  const [passportLoading, setPassportLoading] = useState(false)
+  const [passportUploading, setPassportUploading] = useState(false)
+  const [passportProgress, setPassportProgress] = useState(0)
+  const [passportExpiryInput, setPassportExpiryInput] = useState('')
+  const [passportFile, setPassportFile] = useState<File | null>(null)
+  const [passportError, setPassportError] = useState('')
+  const passportInputRef = useRef<HTMLInputElement>(null)
 
   // Redirect if not authenticated or role mismatch
   useEffect(() => {
@@ -300,6 +322,59 @@ export default function DashboardPage() {
     subscribeToFavorites()
     return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
+
+  // ── Passport: load existing data on mount ──────────────────────────────
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user) return
+    setPassportLoading(true)
+    getPassportData(user.id)
+      .then((data) => {
+        if (data) {
+          setPassport(data)
+          setPassportExpiryInput(data.expiryDate)
+        }
+      })
+      .catch((err) => console.error('[Dashboard] passport load error:', err))
+      .finally(() => setPassportLoading(false))
+  }, [isInitialized, isAuthenticated, user])
+
+  // ── Passport: upload handler ────────────────────────────────────────────
+  const handlePassportUpload = async () => {
+    if (!user || !passportFile || !passportExpiryInput) {
+      setPassportError('Please select a file and enter the expiry date.')
+      return
+    }
+    const allowed = ['image/jpeg', 'image/png', 'application/pdf']
+    if (!allowed.includes(passportFile.type)) {
+      setPassportError('Only JPG, PNG, or PDF files are accepted.')
+      return
+    }
+    if (passportFile.size > 10 * 1024 * 1024) {
+      setPassportError('File must be under 10 MB.')
+      return
+    }
+    setPassportError('')
+    setPassportUploading(true)
+    setPassportProgress(0)
+    try {
+      const url = await uploadPassportFile(user.id, passportFile, (pct) => setPassportProgress(pct))
+      await savePassportData(user.id, {
+        fileUrl: url,
+        fileName: passportFile.name,
+        expiryDate: passportExpiryInput,
+      })
+      const fresh = await getPassportData(user.id)
+      setPassport(fresh)
+      setPassportFile(null)
+      if (passportInputRef.current) passportInputRef.current.value = ''
+    } catch (err: any) {
+      console.error('[Dashboard] passport upload error:', err)
+      setPassportError(err?.message || 'Upload failed. Please try again.')
+    } finally {
+      setPassportUploading(false)
+      setPassportProgress(0)
+    }
+  }
 
   const handleRemoveFavorite = async (packageId: string) => {
     if (!user) return;
@@ -549,6 +624,166 @@ export default function DashboardPage() {
                     Download Loyalty Program PDF
                   </a>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* ── Passport Upload Section ──────────────────────────────────── */}
+            <Card className="border-border/50 mb-8">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                  Passport
+                </CardTitle>
+                <CardDescription>Upload your passport and track its expiry status</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {passportLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+
+                    {/* ── Existing passport display ── */}
+                    {passport && (() => {
+                      const daysLeft = calcDaysLeft(passport.expiryDate)
+                      const status  = getPassportStatus(daysLeft)
+                      return (
+                        <div className="rounded-xl border border-border/50 bg-secondary/20 p-4 space-y-3">
+                          <p className="text-sm font-semibold text-foreground">Current Passport</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                            {/* File link */}
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border/40">
+                              <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                              <a
+                                href={passport.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-primary hover:underline truncate flex items-center gap-1"
+                              >
+                                {passport.fileName}
+                                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              </a>
+                            </div>
+
+                            {/* Expiry date */}
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border/40">
+                              <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <div>
+                                <p className="text-xs text-muted-foreground">Expiry Date</p>
+                                <p className="font-medium text-foreground">
+                                  {new Date(passport.expiryDate).toLocaleDateString('en-US', {
+                                    year: 'numeric', month: 'short', day: 'numeric',
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Days remaining + status */}
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border/40">
+                              <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <div>
+                                <p className="text-xs text-muted-foreground">Days Remaining</p>
+                                <p className="font-bold text-foreground">
+                                  {daysLeft <= 0 ? '—' : `${daysLeft} days`}
+                                </p>
+                              </div>
+                              <span
+                                className={`ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                                  status.bg
+                                } ${status.color} ${status.border}`}
+                              >
+                                <span>{status.emoji}</span>
+                                {status.label}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* ── Upload form ── */}
+                    <div className="space-y-4">
+                      <p className="text-sm font-medium text-foreground">
+                        {passport ? 'Replace Passport' : 'Upload Passport'}
+                      </p>
+
+                      {/* File drop zone */}
+                      <div
+                        className="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border hover:border-primary transition-colors cursor-pointer p-8 bg-secondary/10 hover:bg-secondary/20"
+                        onClick={() => passportInputRef.current?.click()}
+                      >
+                        <Upload className="h-8 w-8 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground text-center">
+                          {passportFile
+                            ? <span className="font-medium text-foreground">{passportFile.name}</span>
+                            : <><span className="font-medium text-primary">Click to choose</span> or drag your passport file here</>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">JPG, PNG, or PDF · Max 10 MB</p>
+                        <input
+                          ref={passportInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null
+                            setPassportFile(f)
+                            setPassportError('')
+                          }}
+                        />
+                      </div>
+
+                      {/* Expiry date */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-foreground" htmlFor="passportExpiryDate">
+                          Passport Expiry Date
+                        </label>
+                        <input
+                          id="passportExpiryDate"
+                          type="date"
+                          value={passportExpiryInput}
+                          onChange={(e) => setPassportExpiryInput(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="h-10 w-full sm:w-60 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+                        />
+                      </div>
+
+                      {/* Error */}
+                      {passportError && (
+                        <p className="text-sm text-red-500">{passportError}</p>
+                      )}
+
+                      {/* Upload progress */}
+                      {passportUploading && (
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Uploading…</span>
+                            <span>{passportProgress}%</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="h-1.5 rounded-full bg-primary transition-all duration-300"
+                              style={{ width: `${passportProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Submit button */}
+                      <Button
+                        onClick={handlePassportUpload}
+                        disabled={passportUploading || !passportFile || !passportExpiryInput}
+                        className="gap-2"
+                      >
+                        {passportUploading ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
+                        ) : (
+                          <><Upload className="h-4 w-4" /> Upload Passport</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

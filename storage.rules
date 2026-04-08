@@ -87,6 +87,23 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    // ── passports/{userId}/{fileName} ────────────────────────────────────
+    // Passport documents uploaded by the user. Owner + admin read; owner write.
+    // Accepted types: JPEG, PNG, PDF. Max size: 10 MB.
+    match /passports/{userId}/{fileName} {
+      allow read:   if isAuthenticated() &&
+                       (request.auth.uid == userId || isAdmin());
+      allow write:  if isAuthenticated() && request.auth.uid == userId
+                    && request.resource.size <= 10 * 1024 * 1024
+                    && (
+                         request.resource.contentType.matches('image/jpeg')
+                      || request.resource.contentType.matches('image/png')
+                      || request.resource.contentType.matches('application/pdf')
+                       );
+      allow delete: if isAuthenticated() &&
+                       (request.auth.uid == userId || isAdmin());
+    }
+
     // ── Catch-all: deny everything else ───────────────────────────────────
     match /{allPaths=**} {
       allow read:   if false;

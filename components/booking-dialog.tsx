@@ -58,7 +58,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     email: '',
     phone: '',
     travelers: '1',
-    travelDate: '',
+    travelDate: new Date().toISOString().split('T')[0],
     specialRequests: '',
     roomType: '',
   })
@@ -106,6 +106,13 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
 
       if (!formData.roomType) {
         setBookingError('Please select a room type.')
+        return
+      }
+
+      // Booking limit validation
+      const travelersCount = parseInt(formData.travelers || '0')
+      if (isNaN(travelersCount) || travelersCount < 1 || travelersCount > 10) {
+        setBookingError('You can only book between 1 and 10 people per package.')
         return
       }
 
@@ -180,8 +187,14 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
       return
     }
 
-    if (!formData.travelers || parseInt(formData.travelers) < 1) {
+    const travelersCount = parseInt(formData.travelers || '0')
+    if (isNaN(travelersCount) || travelersCount < 1) {
       setBookingError('Please select the number of travelers.')
+      return
+    }
+
+    if (travelersCount > 10) {
+      setBookingError('You can only book between 1 and 10 people per package.')
       return
     }
 
@@ -600,7 +613,12 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={
                 (step === 1 && (!formData.firstName || !formData.email)) ||
-                (step === 2 && (!formData.travelDate || !formData.roomType))
+                (step === 2 && (
+                  !formData.travelDate ||
+                  !formData.roomType ||
+                  parseInt(formData.travelers || '0') < 1 ||
+                  parseInt(formData.travelers || '0') > 10
+                ))
               }
             >
               Continue
