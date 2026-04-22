@@ -25,15 +25,27 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
 // ── Type Badge ─────────────────────────────────────────────────
+/** Booking/bonus/admin types are all displayed under the 'Loyalty' category */
+function isLoyaltyType(type: string) {
+  return ['booking', 'bonus', 'welcome_bonus', 'admin_adjustment', 'manual'].includes(type)
+}
+
 function TypeBadge({ type }: { type: string }) {
   const config: Record<string, { label: string; classes: string }> = {
-    loyalty:  { label: 'Loyalty',  classes: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
-    referral: { label: 'Referral', classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+    booking:          { label: 'Booking',    classes: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+    welcome_bonus:    { label: 'Welcome',    classes: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
+    bonus:            { label: 'Bonus',      classes: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300' },
+    admin_adjustment: { label: 'Admin Adj', classes: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' },
+    manual:           { label: 'Manual',     classes: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' },
+    referral:         { label: 'Referral',   classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+    reversal:         { label: 'Reversal',   classes: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+    redemption:       { label: 'Redeemed',   classes: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
+    expiry:           { label: 'Expired',    classes: 'bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400' },
   }
   const c = config[type] || { label: type, classes: 'bg-muted text-muted-foreground' }
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${c.classes}`}>
-      {type === 'loyalty' ? <Star className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+      {isLoyaltyType(type) ? <Star className="h-3 w-3" /> : <Users className="h-3 w-3" />}
       {c.label}
     </span>
   )
@@ -115,15 +127,18 @@ export default function AdminRewardsPage() {
       r.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.userEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.reason.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = typeFilter === 'all' || r.type === typeFilter
+    const matchesType =
+      typeFilter === 'all' ||
+      (typeFilter === 'loyalty' && isLoyaltyType(r.type)) ||
+      (typeFilter === 'referral' && r.type === 'referral')
     return matchesSearch && matchesType
   })
 
   // ── Summary stats ─────────────────────────────────────────────
-  const totalPoints = rewards.reduce((s, r) => s + r.points, 0)
-  const loyaltyCount = rewards.filter((r) => r.type === 'loyalty').length
+  const totalPoints  = rewards.reduce((s, r) => s + r.points, 0)
+  const loyaltyCount = rewards.filter((r) => isLoyaltyType(r.type)).length
   const referralCount = rewards.filter((r) => r.type === 'referral').length
-  const loyaltyPoints = rewards.filter((r) => r.type === 'loyalty').reduce((s, r) => s + r.points, 0)
+  const loyaltyPoints = rewards.filter((r) => isLoyaltyType(r.type)).reduce((s, r) => s + r.points, 0)
   const referralPoints = rewards.filter((r) => r.type === 'referral').reduce((s, r) => s + r.points, 0)
 
   // ── Loading ───────────────────────────────────────────────────

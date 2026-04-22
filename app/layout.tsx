@@ -8,6 +8,7 @@ import { Footer } from '@/components/footer'
 import { ScrollToTop } from '@/components/scroll-to-top'
 import { WhatsAppFloat } from '@/components/whatsapp-float'
 import { OmniaChatbot } from '@/components/omnia-chatbot'
+import { PaymentStatusPopup } from '@/components/payment-status-popup'
 import AutoLogout from '@/components/auto-logout'
 import './globals.css'
 
@@ -49,6 +50,7 @@ export default function RootLayout({
             <ScrollToTop />
             <WhatsAppFloat />
             <OmniaChatbot />
+            <PaymentStatusPopup />
           </div>
         </Providers>
         <Analytics />

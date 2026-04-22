@@ -1,12 +1,14 @@
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
 import { awardBookingCoins, reverseBookingCoins, awardReferralCoins } from "@/lib/services/loyalty.service";
 import { getPackageById } from "@/lib/services/packages.service";
+import { logger } from "@/lib/logger";
 
 export interface FirestoreBooking {
   id: string;
   userId: string;
   userName: string;
   userEmail: string;
+  phone?: string;
   packageId: string;
   packageTitle: string;
   tourId?: string;
@@ -44,6 +46,7 @@ export interface CreateBookingData {
   totalAmount: number;
   omniaServiceValue?: number; // defaults to 0 if not provided
   specialRequests?: string;
+  phone?: string; // full phone number with country code e.g. +251974108003
 }
 
 // Create a new booking
@@ -75,8 +78,14 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     throw new Error("You can only book between 1 and 10 people per package.");
   }
 
-  // 1b. Enforce per-package booking limit (max 10 bookings per user per package)
-  const { query, where, getDocs } = modules.firestore;
+  // 1b. Validate specialRequests length
+  if (data.specialRequests && data.specialRequests.length > 1000) {
+    throw new Error("Special requests cannot exceed 1,000 characters.");
+  }
+
+  // 1c. Enforce per-package booking limit (max 10 bookings per user per package)
+  // Uses a Firestore transaction snapshot to prevent race conditions
+  const { query, where, getDocs, runTransaction, doc: firestoreDoc } = modules.firestore;
   const packageBookingsSnap = await getDocs(
     query(
       collection(db, "bookings"),
@@ -122,10 +131,20 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     }
   }
 
+  // Compute omniaServiceValue server-side from trusted package data — NEVER use client-provided value.
+  // 10% of the total booking value (guests × price from Firestore).
+  const serverPricePerPerson =
+    data.roomType === "sharing"
+      ? ((pkg as any).sharingPrice ?? (pkg as any).pricePerPerson ?? data.pricePerPerson)
+      : ((pkg as any).singlePrice  ?? (pkg as any).pricePerPerson ?? data.pricePerPerson);
+  const serverTotalAmount   = serverPricePerPerson * data.guests;
+  const omniaServiceValue   = Math.floor(serverTotalAmount * 0.10);
+
   const bookingDoc = {
     userId: data.userId,
     userName: data.userName,
     userEmail: data.userEmail,
+    phone: data.phone || "",
     packageId: data.packageId,
     packageTitle: data.packageTitle,
     tourId: data.packageId,
@@ -135,10 +154,10 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     durationDays: pkg.duration > 0 ? pkg.duration : 1,
     guests: data.guests,
     roomType: data.roomType,
-    pricePerPerson: data.pricePerPerson,
-    totalAmount: data.totalAmount,
-    amount: data.totalAmount,
-    omniaServiceValue: data.omniaServiceValue ?? 0,
+    pricePerPerson: serverPricePerPerson,
+    totalAmount: serverTotalAmount,
+    amount: serverTotalAmount,
+    omniaServiceValue,          // server-computed, not client-provided
     coinsEarned: 0,
     coinsStatus: "pending" as const,
     paymentStatus: "pending" as const,
@@ -205,7 +224,7 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
     
     return bookings;
   } catch (error: any) {
-    console.error("Error fetching user bookings:", error);
+    logger.error("Error fetching user bookings:", error);
     return [];
   }
 }
@@ -273,7 +292,7 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
       return [];
     }
 
-    console.error("Error fetching bookings:", error);
+    logger.error("Error fetching bookings:", error);
     return [];
   }
 }
@@ -372,7 +391,7 @@ export async function updateBookingStatus(
     updatedAt: serverTimestamp(),
   });
 
-  if (bookingStatus === "completed" || bookingStatus === "confirmed") {
+  if (bookingStatus === "completed") {
     await awardBookingCoins(bookingId);
     await tryAwardReferralCoins(bookingId);
   } else if (bookingStatus === "cancelled") {

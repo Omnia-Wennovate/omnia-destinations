@@ -4,6 +4,18 @@ import { useEffect } from 'react'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
 import { useAuthStore } from '@/store/auth'
 
+// ── Session-cookie helpers (powers Edge middleware for /admin protection) ──────
+const SESSION_COOKIE = 'omnia_session'
+
+function setSessionCookie() {
+  const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = `${SESSION_COOKIE}=1; Path=/; SameSite=Strict${secure}`
+}
+
+function clearSessionCookie() {
+  document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Strict`
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setInitialized } = useAuthStore()
 
@@ -30,14 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const userDocRef  = doc(db, 'users',  firebaseUser.uid)
               const adminDocRef = doc(db, 'admins', firebaseUser.uid)
 
-              // Read user profile and admin membership in parallel
               const [userDocSnap, adminDocSnap] = await Promise.all([
                 getDoc(userDocRef),
                 getDoc(adminDocRef),
               ])
 
               const userData = userDocSnap.exists() ? userDocSnap.data() : null
-              // /admins/{uid} existence is the single source of truth for ADMIN role
               const role = adminDocSnap.exists() ? 'ADMIN' : (userData?.role || 'USER')
 
               setUser({
@@ -48,6 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 role,
                 photoURL:  firebaseUser.photoURL || '',
               })
+
+              // Set/clear session cookie for Edge middleware (/admin route guard)
+              if (role === 'ADMIN') {
+                setSessionCookie()
+              } else {
+                clearSessionCookie()
+              }
             } else {
               setUser({
                 id:        firebaseUser.uid,
@@ -57,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 role:      'USER',
                 photoURL:  firebaseUser.photoURL || '',
               })
+              clearSessionCookie()
             }
           } catch {
             setUser({
@@ -67,12 +85,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role:      'USER',
               photoURL:  firebaseUser.photoURL || '',
             })
+            clearSessionCookie()
           }
         } else {
           const currentUser = useAuthStore.getState().user
           if (!currentUser || currentUser.id !== 'admin') {
             setUser(null)
           }
+          clearSessionCookie() // Always clear on sign-out
         }
         setInitialized(true)
       })

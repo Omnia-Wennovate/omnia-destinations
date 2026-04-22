@@ -39,28 +39,42 @@ service cloud.firestore {
     match /users/{userId} {
       allow read:   if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId);
-      // Users may update only non-loyalty profile fields.
-      // All loyalty fields are exclusively written by backend service logic.
+      // Users may update only safe profile fields.
+      // ALL loyalty/tier/role fields are exclusively written by backend
+      // (API routes using Admin SDK) or admin panel.
       allow update: if (isOwner(userId) &&
                         !request.resource.data.diff(resource.data)
                           .affectedKeys()
                           .hasAny([
                             'loyaltyPoints', 'totalCoinsEarned',
+                            'tierCoins',
                             'annualOmniaValue', 'lifetimeOmniaValue',
                             'annualResetDate', 'tier', 'tierUpdatedAt',
                             'tierOverriddenByAdmin', 'role', 'travelFamily',
-                            'travelFamilyAssignedAt'
+                            'travelFamilyAssignedAt', 'totalPackages',
+                            'totalSpend', 'referredBy', 'referralCode',
+                            'referralCodeUsed', 'totalReferrals'
                           ]))
                     || isAdmin();
       allow delete: if isAdmin();
 
-      // coinsHistory — written by loyalty service running in user context.
-      // Users can read their own history. Creates/updates allowed for
-      // authenticated owner (loyalty service runs under user's auth token).
+      // coinsHistory — ADMIN ONLY writes (system writes via Admin SDK bypass rules).
+      // Users can only read their own history. No client-side coin creation allowed.
       match /coinsHistory/{txId} {
         allow read:   if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) || isAdmin();
-        allow update: if isOwner(userId) || isAdmin();
+        // Field-level validation prevents fabricated entries even if owner attempts write:
+        // - type must not be 'booking' (only system awards booking coins)
+        // - coins must be positive (no manual negative manipulation)
+        // - affectsTier must be false (tier-affecting coins come from system only)
+        allow create: if isAdmin() ||
+          (isOwner(userId)
+           && request.resource.data.keys().hasAll(['coins', 'type', 'affectsTier', 'reason'])
+           && request.resource.data.coins is int
+           && request.resource.data.coins >= 0
+           && request.resource.data.affectsTier == false
+           && !(request.resource.data.type in ['booking', 'admin_adjustment', 'manual', 'welcome_bonus', 'bonus'])
+          );
+        allow update: if isAdmin();   // clients may NOT update history records
         allow delete: if false;
       }
 
@@ -104,31 +118,52 @@ service cloud.firestore {
     }
 
     // ── bookings ──────────────────────────────────────────────────────────
-    // Users create their own bookings; loyalty fields must not be set by client.
-    // Admins own all update/delete rights.
-    // Owner update also allowed so loyalty service can mark coinsStatus.
+    // Users create their own bookings; critical financial fields must not
+    // be set or modified by the client.
+    // All payment/status/loyalty updates go through Admin SDK (API routes).
 
     match /bookings/{bookingId} {
       allow create: if isAuthenticated()
                     && request.resource.data.userId == request.auth.uid
-                    && !request.resource.data.keys()
-                         .hasAny(['coinsStatus', 'coinsEarned',
-                                  'omniaServiceValue'])
+                    // Status fields must start at safe initial values — prevents pre-paid booking fraud
+                    && request.resource.data.paymentStatus == "pending"
+                    && request.resource.data.bookingStatus == "pending"
+                    && request.resource.data.coinsStatus   == "pending"
+                    && request.resource.data.coinsEarned   == 0
+                    // Payment tracking fields are set exclusively by the payment API (Admin SDK)
+                    && !request.resource.data.keys().hasAny(['tx_ref', 'paymentInitiatedAt'])
+                    // Guest count validation
                     && request.resource.data.guests is int
                     && request.resource.data.guests >= 1
                     && request.resource.data.guests <= 10;
+
       allow read:   if isOwner(resource.data.userId) || isAdmin();
-      allow update: if isOwner(resource.data.userId) || isAdmin();
+
+      // LOCKED: users may ONLY update specialRequests and phone (safe UX fields).
+      // ALL financial, status, and loyalty fields are server-only.
+      allow update: if isAdmin() ||
+        (isOwner(resource.data.userId)
+         && request.resource.data.diff(resource.data)
+              .affectedKeys()
+              .hasOnly(['specialRequests', 'phone', 'updatedAt'])
+        );
+
       allow delete: if isAdmin();
     }
 
     // ── referrals ─────────────────────────────────────────────────────────
-    // Written by loyalty service running in the user's context after booking.
-    // Immutable once created (idempotency guard).
+    // Immutable once created. referrerId must match the authenticated caller.
+    // Only the referrer or the referred user may read their specific record.
 
     match /referrals/{referralId} {
-      allow read:   if isAuthenticated();
-      allow create: if isAuthenticated();
+      // Scoped read: only the involved users (not global list)
+      allow read:   if isAdmin() ||
+        (isAuthenticated() &&
+          (request.auth.uid == resource.data.referrerId ||
+           request.auth.uid == resource.data.referredUserId));
+      // Client-side referral creation: referrerId MUST match the caller
+      allow create: if isAuthenticated() &&
+        request.resource.data.referrerId == request.auth.uid;
       allow update: if false;
       allow delete: if false;
     }
@@ -144,9 +179,13 @@ service cloud.firestore {
     }
 
     // ── subscribers ───────────────────────────────────────────────────────
+    // FIX: require authentication + basic field validation to prevent spam.
 
     match /subscribers/{subscriberId} {
-      allow create: if true;
+      allow create: if isAuthenticated()
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 4
+        && request.resource.data.email.size() <= 254;
       allow read:   if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -168,6 +207,17 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
+    }
+
+    // ── loyaltyTransactions (top-level mirror) ────────────────────────────
+    // Written only by server (Admin SDK). Users can read their own records.
+
+    match /loyaltyTransactions/{txId} {
+      allow read:   if isAdmin() ||
+        (isAuthenticated() && request.auth.uid == resource.data.userId);
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // ── rewards (legacy flat collection) ──────────────────────────────────

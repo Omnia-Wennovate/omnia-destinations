@@ -1,0 +1,13 @@
+﻿app/about/page.tsx(45,13): error TS2322: Type '{ text: string; highlightWord: string; className: string; speed: number; }' is not assignable to type 'IntrinsicAttributes & TypewriterTextProps'.
+  Property 'highlightWord' does not exist on type 'IntrinsicAttributes & TypewriterTextProps'. Did you mean 'highlightWords'?
+app/admin/news/[id]/edit/page.tsx(92,42): error TS2345: Argument of type 'string' is not assignable to parameter of type 'File'.
+app/admin/news/create/page.tsx(72,42): error TS2345: Argument of type 'string' is not assignable to parameter of type 'File'.
+app/admin/page.tsx(50,21): error TS2551: Property 'totalTours' does not exist on type 'AdminStats'. Did you mean 'totalUsers'?
+app/admin/page.tsx(174,76): error TS2551: Property 'totalTours' does not exist on type 'AdminStats'. Did you mean 'totalUsers'?
+components/packages-section.tsx(29,16): error TS2741: Property 'package' is missing in type '{ id: string; title: string; location: string; image: string; duration: string; price?: number | undefined; singlePrice: number; sharingPrice: number; rating: number; availableFrom?: string | undefined; ... 14 more ...; nextAvailable?: string | undefined; }' but required in type 'PackageCardProps'.
+components/popular-tours-section.tsx(27,14): error TS2322: Type '{ id: string; title: string; location: string; duration: string; price?: number | undefined; singlePrice?: number | undefined; sharingPrice?: number | undefined; rating: number; reviews: number; ... 15 more ...; maxPeople?: number | undefined; }' is not assignable to type 'TourCardProps'.
+  Types of property 'price' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+components/typewriter-text.tsx(4,24): error TS7016: Could not find a declaration file for module 'typewriter-effect/dist/core'. 'C:/Users/eyobe/Desktop/omnia-website-clone (1)/node_modules/typewriter-effect/dist/core.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/typewriter-effect` if it exists or add a new declaration (.d.ts) file containing `declare module 'typewriter-effect/dist/core';`

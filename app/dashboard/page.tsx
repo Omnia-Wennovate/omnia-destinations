@@ -50,6 +50,8 @@ interface UserProfile {
   loyaltyPoints: number
   tier: string
   totalCoinsEarned: number
+  totalPackages: number
+  totalSpend: number
   annualOmniaValue: number
   referralCode: string
   totalReferrals: number
@@ -58,32 +60,53 @@ interface UserProfile {
   createdAt: any
 }
 
-// ── Tier configuration ─────────────────────────────────────────────────────────
+// ── Tier configuration (matches loyalty.service.ts TIERS exactly) ─────────────
 const TIER_CONFIG = [
-  { name: 'Hope', icon: '⭐', minCoins: 0, minSpend: 0, multiplier: '1x', benefit: '1× coin multiplier on every booking', badgeBg: 'bg-blue-100 dark:bg-blue-950/60', badgeText: 'text-blue-700 dark:text-blue-300', badgeBorder: 'border-blue-300 dark:border-blue-700', bar: 'bg-blue-500' },
-  { name: 'Explorer', icon: '🧭', minCoins: 500, minSpend: 50_000, multiplier: '1.2x', benefit: '1.2× coins — earn 20% more per trip', badgeBg: 'bg-gray-100 dark:bg-gray-800/60', badgeText: 'text-gray-700 dark:text-gray-300', badgeBorder: 'border-gray-300 dark:border-gray-600', bar: 'bg-gray-500' },
-  { name: 'Gold', icon: '👑', minCoins: 1_000, minSpend: 100_000, multiplier: '1.5x', benefit: '1.5× coins — half again more rewards', badgeBg: 'bg-amber-100 dark:bg-amber-950/60', badgeText: 'text-amber-700 dark:text-amber-300', badgeBorder: 'border-amber-300 dark:border-amber-700', bar: 'bg-amber-500' },
-  { name: 'Platinum', icon: '💎', minCoins: 1_500, minSpend: 200_000, multiplier: '2x', benefit: '2× coins + priority support', badgeBg: 'bg-purple-100 dark:bg-purple-950/60', badgeText: 'text-purple-700 dark:text-purple-300', badgeBorder: 'border-purple-300 dark:border-purple-700', bar: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+  {
+    name: 'Hope',     icon: '🥉', minPackages: 0,  minCoins: 0,      minSpend: 0,         multiplier: '1x',   benefit: '1× coin multiplier on every booking',
+    badgeBg: 'bg-orange-100 dark:bg-orange-950/60', badgeText: 'text-orange-700 dark:text-orange-300', badgeBorder: 'border-orange-300 dark:border-orange-700', bar: 'bg-orange-400',
+  },
+  {
+    name: 'Explorer', icon: '🧭', minPackages: 2,  minCoins: 7_000,   minSpend: 700_000,   multiplier: '1.2x', benefit: '1.2× coins — earn 20% more per trip',
+    badgeBg: 'bg-gray-100 dark:bg-gray-800/60',   badgeText: 'text-gray-700 dark:text-gray-300',     badgeBorder: 'border-gray-300 dark:border-gray-600',   bar: 'bg-gray-500',
+  },
+  {
+    name: 'Voyager',  icon: '✈️',  minPackages: 4,  minCoins: 15_400,  minSpend: 1_400_000, multiplier: '1.5x', benefit: '1.5× coins — half again more rewards',
+    badgeBg: 'bg-amber-100 dark:bg-amber-950/60', badgeText: 'text-amber-700 dark:text-amber-300',   badgeBorder: 'border-amber-300 dark:border-amber-700', bar: 'bg-amber-500',
+  },
+  {
+    name: 'Elite',    icon: '💎', minPackages: 8,  minCoins: 36_400,  minSpend: 2_800_000, multiplier: '2x',   benefit: '2× coins + priority support',
+    badgeBg: 'bg-purple-100 dark:bg-purple-950/60', badgeText: 'text-purple-700 dark:text-purple-300', badgeBorder: 'border-purple-300 dark:border-purple-700', bar: 'bg-gradient-to-r from-purple-500 to-pink-500',
+  },
+  {
+    name: 'Royal',    icon: '👑', minPackages: 16, minCoins: 92_400,  minSpend: 5_600_000, multiplier: '3x',   benefit: '3× coins — maximum tier rewards',
+    badgeBg: 'bg-yellow-100 dark:bg-yellow-950/60', badgeText: 'text-yellow-700 dark:text-yellow-300', badgeBorder: 'border-yellow-300 dark:border-yellow-700', bar: 'bg-gradient-to-r from-yellow-400 to-amber-500',
+  },
 ] as const
 
 function getTierConfig(tier: string) {
   return TIER_CONFIG.find(t => t.name === tier) ?? TIER_CONFIG[0]
 }
 
-function getTierProgress(tier: string, totalCoinsEarned: number, annualOmniaValue: number) {
+function getTierProgress(tier: string, totalCoinsEarned: number, totalPackages: number, totalSpend: number) {
   const currentIdx = TIER_CONFIG.findIndex(t => t.name === tier)
-  if (currentIdx === TIER_CONFIG.length - 1) return null // already Platinum
+  if (currentIdx === TIER_CONFIG.length - 1) return null // already Royal
   const next = TIER_CONFIG[currentIdx + 1]
-  // Use whichever metric gives the better (higher) progress
-  const coinsPct = next.minCoins > 0 ? Math.min(100, Math.round((totalCoinsEarned / next.minCoins) * 100)) : 100
-  const spendPct = next.minSpend > 0 ? Math.min(100, Math.round((annualOmniaValue / next.minSpend) * 100)) : 100
-  const percent = Math.max(coinsPct, spendPct)
-  const coinsLeft = Math.max(0, next.minCoins - totalCoinsEarned)
-  const spendLeft = Math.max(0, next.minSpend - annualOmniaValue)
+  // Use whichever metric gives the best (highest) progress
+  const coinsPct   = next.minCoins    > 0 ? Math.min(100, Math.round((totalCoinsEarned / next.minCoins)    * 100)) : 100
+  const pkgPct     = next.minPackages > 0 ? Math.min(100, Math.round((totalPackages    / next.minPackages) * 100)) : 100
+  const spendPct   = next.minSpend    > 0 ? Math.min(100, Math.round((totalSpend       / next.minSpend)    * 100)) : 100
+  const percent    = Math.max(coinsPct, pkgPct, spendPct)
+  const coinsLeft  = Math.max(0, next.minCoins    - totalCoinsEarned)
+  const pkgsLeft   = Math.max(0, next.minPackages - totalPackages)
+  const spendLeft  = Math.max(0, next.minSpend    - totalSpend)
   const parts: string[] = []
-  if (coinsLeft > 0) parts.push(`earn ${coinsLeft.toLocaleString()} more coins`)
-  if (spendLeft > 0) parts.push(`spend ${spendLeft.toLocaleString()} ETB more`)
-  const hint = parts.length > 0 ? `${parts.join(' or ')} to reach ${next.name}` : `You qualify for ${next.name}!`
+  if (pkgsLeft   > 0) parts.push(`${pkgsLeft} more package${pkgsLeft !== 1 ? 's' : ''}`)
+  if (coinsLeft  > 0) parts.push(`earn ${coinsLeft.toLocaleString()} more coins`)
+  if (spendLeft  > 0) parts.push(`spend ${spendLeft.toLocaleString()} ETB more`)
+  const hint = parts.length > 0
+    ? `${parts.join(' or ')} to reach ${next.name}`
+    : `You qualify for ${next.name}!`
   return { nextTier: next.name, nextIcon: next.icon, percent, hint, bar: next.bar }
 }
 
@@ -155,6 +178,8 @@ export default function DashboardPage() {
           loyaltyPoints: 0,
           tier: 'Hope',
           totalCoinsEarned: 0,
+          totalPackages: 0,
+          totalSpend: 0,
           annualOmniaValue: 0,
           referralCode: '------',
           totalReferrals: 0,
@@ -178,6 +203,8 @@ export default function DashboardPage() {
             loyaltyPoints: data.loyaltyPoints ?? 0,
             tier: data.tier ?? 'Hope',
             totalCoinsEarned: data.totalCoinsEarned ?? 0,
+            totalPackages: data.totalPackages ?? 0,
+            totalSpend: data.totalSpend ?? 0,
             annualOmniaValue: data.annualOmniaValue ?? 0,
             referralCode: data.referralCode || '------',
             totalReferrals: data.totalReferrals ?? 0,
@@ -192,6 +219,8 @@ export default function DashboardPage() {
             loyaltyPoints: 0,
             tier: 'Hope',
             totalCoinsEarned: 0,
+            totalPackages: 0,
+            totalSpend: 0,
             annualOmniaValue: 0,
             referralCode: '------',
             totalReferrals: 0,
@@ -519,7 +548,7 @@ export default function DashboardPage() {
                   {/* ── Enhanced Tier Display ─────────────────────────────── */}
                   {profile && (() => {
                     const cfg = getTierConfig(profile.tier)
-                    const progress = getTierProgress(profile.tier, profile.totalCoinsEarned, profile.annualOmniaValue)
+                    const progress = getTierProgress(profile.tier, profile.totalCoinsEarned, profile.totalPackages, profile.totalSpend)
                     return (
                       <div className="mt-3 space-y-2.5" style={{ animation: 'tierFadeIn 0.5s ease-out' }}>
                         {/* Tier Badge */}

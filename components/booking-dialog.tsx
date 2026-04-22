@@ -24,6 +24,7 @@ import {
 import { useAuthStore } from '@/store/auth'
 import { createBooking, getUserBookings } from '@/lib/services/bookings.service'
 import { useToast } from '@/hooks/use-toast'
+import { COUNTRY_CODES } from '@/lib/constants/countries'
 
 interface BookingDialogProps {
   open?: boolean
@@ -52,11 +53,13 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
   const isOpen = isControlled ? open : internalOpen
 
   const [step, setStep] = useState(1)
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
+    countryCode: '+251',
     travelers: '1',
     travelDate: new Date().toISOString().split('T')[0],
     specialRequests: '',
@@ -206,6 +209,18 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
     setIsSubmitting(true)
     setBookingError(null)
 
+    // Combine country code + phone digits into full phone number
+    const fullPhone = formData.phone
+      ? `${formData.countryCode}${formData.phone}`
+      : ''
+
+    // Validate: phone must not be empty and must be digits only
+    if (!fullPhone || !/^\+\d{6,15}$/.test(fullPhone)) {
+      setBookingError('Please enter a valid phone number.')
+      setIsSubmitting(false)
+      return
+    }
+
     try {
       // Create booking in Firestore
       // Using 10% of total price for the coins calculation as omniaServiceValue
@@ -220,8 +235,9 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
         roomType: formData.roomType as "single" | "sharing",
         pricePerPerson,
         totalAmount: totalPrice,
-        omniaServiceValue: Math.floor(totalPrice * 0.10), // Adding service fee calculation
+        // omniaServiceValue is intentionally omitted — computed server-side from package data
         specialRequests: formData.specialRequests,
+        phone: fullPhone,
       })
 
       // Initialize Chapa checkout instead of immediate success
@@ -464,13 +480,59 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="+1 (555) 000-0000"
-                value={formData.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-              />
+              <div className="flex">
+                {/* Country code selector */}
+                <Select
+                  value={formData.countryCode}
+                  onValueChange={(value) => handleInputChange('countryCode', value)}
+                >
+                  <SelectTrigger
+                    id="phoneCountryCode"
+                    className="w-[110px] shrink-0 rounded-l-md rounded-r-none border-r-0 focus:z-10 focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Country code"
+                  >
+                    <SelectValue>
+                      {(() => {
+                        const selected = COUNTRY_CODES.find(c => c.code === formData.countryCode)
+                        return selected ? (
+                          <div className="flex items-center gap-1.5">
+                            {selected.iso && <img src={`https://flagcdn.com/w20/${selected.iso}.png`} width="20" alt={`${selected.iso} flag`} className="shrink-0 rounded-[2px]" />}
+                            <span>{selected.code}</span>
+                          </div>
+                        ) : "Code"
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {COUNTRY_CODES.map(({ code, iso, label }) => (
+                      <SelectItem key={label} value={code}>
+                        <div className="flex items-center gap-2">
+                          {iso && <img src={`https://flagcdn.com/w20/${iso}.png`} width="20" alt={`${iso} flag`} className="shrink-0 rounded-[2px]" />}
+                          <span className="truncate">{label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Phone digits input */}
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="912345678"
+                  value={formData.phone}
+                  onChange={(e) => {
+                    // Strip non-digit characters (allow leading + only if user pastes full number)
+                    const raw = e.target.value.replace(/[^\d]/g, '')
+                    handleInputChange('phone', raw)
+                  }}
+                  className="rounded-l-none"
+                />
+              </div>
+              {formData.phone && (
+                <p className="text-xs text-muted-foreground">
+                  Full number: <span className="font-mono">{formData.countryCode}{formData.phone}</span>
+                </p>
+              )}
             </div>
           </div>
         )}

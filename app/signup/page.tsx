@@ -8,6 +8,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Check } from 'lucide-react'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
+import { awardWelcomeBonus } from '@/lib/services/loyalty.service'
 import { signInWithGoogle, signInWithApple } from '@/lib/services/social-auth.service'
 import { signupSchema, type SignupFormData } from '@/lib/validations/auth'
 import { useAuthStore } from '@/store/auth'
@@ -85,13 +86,13 @@ export default function SignupPage() {
 
   const { strength, label, color } = getPasswordStrength(password)
 
-  function generateReferralCode() {
+  /** Cryptographically secure referral code generator — replaces Math.random() */
+  function generateReferralCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    let code = ''
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return 'OM' + code
+    const array = new Uint8Array(6)
+    crypto.getRandomValues(array) // CSPRNG — not predictable
+    const suffix = Array.from(array).map(b => chars[b % chars.length]).join('')
+    return 'OM' + suffix
   }
 
 const onSubmit = async (data: SignupFormData) => {
@@ -197,6 +198,8 @@ const onSubmit = async (data: SignupFormData) => {
       tier: 'Hope',
       loyaltyPoints: 0,
       totalCoinsEarned: 0,
+      totalPackages: 0,
+      totalSpend: 0,
       annualOmniaValue: 0,
       referralCode: myReferralCode,
       referralCodeUsed: validReferralCode,
@@ -205,17 +208,20 @@ const onSubmit = async (data: SignupFormData) => {
       createdAt: serverTimestamp(),
     })
 
+    // Award 1,000 welcome bonus coins
+    await awardWelcomeBonus(firebaseUser.uid)
+
     await signOut(auth)
 
     alert('Account created successfully. Please login.')
 
     router.push('/login')
   } catch (error: any) {
-    console.log('Signup error:', error)
-
+    // Only log the code in development — never expose raw error objects in production
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Signup error:', error)
+    }
     setFormError(error?.message || 'Signup failed. Please try again.')
-
-    router.push('/login')
   } finally {
     setLoading(false)
   }

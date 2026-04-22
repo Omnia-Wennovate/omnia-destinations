@@ -5,11 +5,16 @@ export interface FirestoreUser {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "user" | "ADMIN" | "USER"; // normalised to lowercase in practice
+  role: "admin" | "user" | "ADMIN" | "USER";
   loyaltyPoints: number;
   totalCoinsEarned: number;
   totalReferrals: number;
+  /** Completed packages count — used for tier qualification */
+  totalPackages: number;
+  /** Total ETB spend on Omnia service value — used for tier qualification */
+  totalSpend: number;
   tier: TierName;
+  /** Legacy field — kept for backward compat; mirrors totalSpend */
   annualOmniaSpend: number;
   travelFamily?: string;
   phone?: string;
@@ -38,8 +43,10 @@ export async function getUsersFromFirestore(): Promise<FirestoreUser[]> {
         loyaltyPoints: data.loyaltyPoints || 0,
         totalCoinsEarned: data.totalCoinsEarned || 0,
         totalReferrals: data.totalReferrals || 0,
+        totalPackages: data.totalPackages || 0,
+        totalSpend: data.totalSpend || 0,
         tier: data.tier || "Hope",
-        annualOmniaSpend: data.annualOmniaSpend || 0,
+        annualOmniaSpend: data.annualOmniaSpend || data.totalSpend || 0,
         travelFamily: data.travelFamily || "",
         phone: data.phone || "",
         referralCode: data.referralCode || "",
@@ -63,13 +70,32 @@ export async function getUsersFromFirestore(): Promise<FirestoreUser[]> {
   }
 }
 
-export async function updateUserRole(userId: string, role: "admin" | "user"): Promise<void> {
+export async function updateUserRole(
+  userId: string,
+  role: "admin" | "user",
+  adminId = "system"
+): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) throw new Error("Database not initialized");
 
-  const { doc, updateDoc, serverTimestamp } = modules.firestore;
+  const { doc, updateDoc, addDoc, collection, serverTimestamp } = modules.firestore;
+
+  // Update the role field
   await updateDoc(doc(db, "users", userId), { role, updatedAt: serverTimestamp() });
+
+  // Audit log — every role change is recorded (non-fatal)
+  try {
+    await addDoc(collection(db, "auditLogs"), {
+      actionType: "role_change",
+      targetUserId: userId,
+      newRole: role,
+      adminId,
+      changedAt: serverTimestamp(),
+    });
+  } catch {
+    // Non-fatal — role was already updated; audit failure should not block the operation
+  }
 }
 
 /**
@@ -87,7 +113,7 @@ export async function adjustLoyaltyPoints(
     targetUserId: userId,
     amount,
     reason,
-    type: "manual",
+    type: "admin_adjustment",
   });
 }
 
