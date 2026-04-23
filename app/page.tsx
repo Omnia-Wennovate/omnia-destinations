@@ -1,6 +1,6 @@
 import { SearchSection } from '@/components/search-section'
 import { PackagesSection } from '@/components/packages-section'
-import { TopDestinationsSection } from '@/components/top-destinations-section'
+import { TestimonialsSlider } from '@/components/testimonials-slider'
 import { PopularToursSection } from '@/components/popular-tours-section'
 
 export default function Home() {
@@ -8,7 +8,7 @@ export default function Home() {
     <>
       <SearchSection />
       <PackagesSection />
-      <TopDestinationsSection />
+      <TestimonialsSlider />
       <PopularToursSection />
     </>
   )
