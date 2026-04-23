@@ -1,20 +1,16 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { useParams, notFound } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { getPackageById, type PackageData } from '@/lib/services/packages.service'
+import { getPackageById, getPackageBySlug, type PackageData } from '@/lib/services/packages.service'
 import { PACKAGES } from '@/lib/data/packages'
 import { TourDetailClient } from '@/components/tour-detail-client'
-import { useRouteGuard } from '@/hooks/use-route-guard'
 
 export default function PackageDetailPage() {
   const params = useParams()
-  const id = params.id as string
-
-  // 🔐 Only authenticated regular users may access this page.
-  // Unauthenticated → /login?redirect=...   Admin → /admin
-  const { isReady } = useRouteGuard('user')
+  const slug = params.slug as string
 
   const [packageData, setPackageData] = useState<PackageData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,26 +18,26 @@ export default function PackageDetailPage() {
 
   // All hooks must be declared before any conditional returns.
   useEffect(() => {
-    // Skip fetching until auth is confirmed (isReady) so we don't load
-    // data for users who will be redirected away.
-    if (!isReady) return
 
     async function fetchPackage() {
       try {
         setLoading(true)
+        console.log("URL SLUG:", slug)
 
-        // 🔹 Fetch from Firestore - supports both ID and Slug
-        const firestorePkg = await getPackageById(id)
+        // 🔹 Fetch from Firestore
+        const firestorePkg = await getPackageBySlug(slug)
 
         if (firestorePkg) {
+          console.log("✅ Package found in Firestore/Fallback:", firestorePkg.title)
           setPackageData(firestorePkg)
           return
         }
 
         // 🔹 Fallback to static packages
-        const staticPkg = PACKAGES.find((p) => p.id === id)
+        const staticPkg = PACKAGES.find((p) => p.id === slug)
 
         if (staticPkg) {
+          console.log("✅ Package found in Static Data:", staticPkg.title)
           setPackageData({
             id: staticPkg.id,
             title: staticPkg.title,
@@ -61,6 +57,7 @@ export default function PackageDetailPage() {
             videoURL: staticPkg.videoUrl || '',
           })
         } else {
+          console.log("❌ Package not found for slug:", slug)
           setNotFoundState(true)
         }
 
@@ -72,17 +69,10 @@ export default function PackageDetailPage() {
       }
     }
 
-    fetchPackage()
-  }, [id, isReady])
-
-  // While auth state is being determined, show a spinner.
-  if (!isReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
+    if (slug) {
+      fetchPackage()
+    }
+  }, [slug])
 
   if (loading) {
     return (
@@ -93,7 +83,15 @@ export default function PackageDetailPage() {
   }
 
   if (notFoundState || !packageData) {
-    notFound()
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <h2 className="text-2xl font-bold mb-2">Package Not Found</h2>
+        <p className="text-muted-foreground mb-6">We couldn't find the package you're looking for.</p>
+        <Link href="/packages" className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6 py-2 rounded-lg">
+          Browse all packages
+        </Link>
+      </div>
+    )
   }
 
   // Build itinerary from day1–day7 fields; skip empty days

@@ -68,7 +68,8 @@ export default function PackagesPage() {
   // Combine Firestore packages with static fallback data
   const allPackages = useMemo(() => {
     const firestoreConverted = firestorePackages.map((pkg) => ({
-      id: pkg.slug || pkg.id,
+      id: pkg.id,
+      slug: pkg.slug || pkg.id,
       title: pkg.title,
       location: pkg.location,
       image: pkg.featuredImageURL || pkg.images?.[0] || "/images/placeholder.jpg",
@@ -86,6 +87,7 @@ export default function PackagesPage() {
 
     return PACKAGES.map((pkg) => ({
       id: pkg.id,
+      slug: pkg.id,
       title: pkg.title,
       location: pkg.location,
       image: pkg.image,

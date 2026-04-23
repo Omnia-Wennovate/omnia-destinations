@@ -6,6 +6,7 @@ import { BookNowButton } from "@/components/book-now-button"
 interface PackageCardProps {
   package: {
     id: string
+    slug?: string
     title: string
     location: string
     image?: string
@@ -21,7 +22,8 @@ interface PackageCardProps {
 export function PackageCard({ package: pkg }: PackageCardProps) {
   if (!pkg) return null
 
-  const { id, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil } = pkg
+  const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil } = pkg
+  const linkSlug = slug || id
 
   const formatAvailability = (start?: string, end?: string) => {
     if (!start && !end) return null
@@ -49,7 +51,7 @@ export function PackageCard({ package: pkg }: PackageCardProps) {
 
   return (
     <Link
-      href={`/packages/${id}`}
+      href={`/packages/${linkSlug}`}
       className="group overflow-hidden rounded-lg bg-card shadow-md transition-shadow hover:shadow-xl block"
     >
       <div className="relative aspect-[4/3] overflow-hidden">

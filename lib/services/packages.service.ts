@@ -246,7 +246,12 @@ export async function getPackageById(packageId: string): Promise<PackageData | n
       }
 
       // 2. Fallback: try fetching by slug
-      const slugQuery = query(collection(db, "packages"), where("slug", "==", packageId), limit(1));
+      const slugQuery = query(
+        collection(db, "packages"), 
+        where("slug", "==", packageId), 
+        where("status", "==", "published"),
+        limit(1)
+      );
       const slugSnap = await getDocs(slugQuery);
       if (!slugSnap.empty) {
         const d = slugSnap.docs[0];
@@ -307,16 +312,56 @@ export async function getPackageById(packageId: string): Promise<PackageData | n
 }
 
 // Fetch full package by slug (used on detail page - lazy loaded)
-export async function getPackageBySlug(slug: string): Promise<PackageData | null> {
+export async function getPackageBySlug(rawSlug: string): Promise<PackageData | null> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  if (!db || !modules.firestore) return null;
+  if (!db || !modules.firestore) {
+    console.log("❌ Firebase not initialized");
+    return null;
+  }
 
-  const { collection, query, where, limit, getDocs } = modules.firestore;
-  const snap = await getDocs(query(collection(db, "packages"), where("slug", "==", slug), limit(1)));
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() } as PackageData;
+  const { doc, getDoc, collection, query, where, limit, getDocs } = modules.firestore;
+  
+  const normalizedSlug = rawSlug.toLowerCase().trim();
+  console.log("URL SLUG:", rawSlug);
+  console.log("QUERYING FOR:", normalizedSlug);
+
+  try {
+    const slugQuery = query(
+      collection(db, "packages"), 
+      where("slug", "==", normalizedSlug), 
+      // Required for Firestore rules, otherwise permission denied for public users
+      where("status", "==", "published"),
+      limit(1)
+    );
+    const snapshot = await getDocs(slugQuery);
+
+    console.log("SNAPSHOT SIZE:", snapshot.size);
+    console.log("DATA:", snapshot.docs[0]?.data());
+
+    if (snapshot.empty) {
+      console.log("❌ No package found for slug");
+      
+      // Fallback: fetch document by ID using slug (temporary debug only)
+      console.log("Trying fallback: fetch document by ID");
+      const snap = await getDoc(doc(db, "packages", normalizedSlug));
+      if (snap.exists()) {
+        const data = snap.data();
+        // Check status for fallback too just to be safe
+        if (data.status === 'published' || data.status === 'draft') {
+           console.log("✅ Package found by ID fallback");
+           return { id: snap.id, ...data } as PackageData;
+        }
+      }
+      return null;
+    }
+
+    const d = snapshot.docs[0];
+    return { id: d.id, ...d.data() } as PackageData;
+  } catch (error) {
+    console.error("Error fetching package by slug:", error);
+    return null;
+  }
 }
 
 // ── Media uploads ──────────────────────────────────────────────────────────

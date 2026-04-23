@@ -26,7 +26,7 @@ export function PackagesSection() {
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {PACKAGES.map((pkg, index) => (
             <ScrollReveal key={pkg.id} direction="up" delay={index * 0.1}>
-              <PackageCard {...pkg} />
+              <PackageCard package={pkg} />
             </ScrollReveal>
           ))}
         </div>

@@ -1,6 +1,26 @@
 /**
  * Omnia Loyalty Program — Core Service (v2)
+<<<<<<< HEAD
  * ...(see original header for full design notes)
+=======
+ *
+ * Single source of truth for all coin calculation, tier evaluation,
+ * referral logic, expiry, redemption, and admin overrides.
+ *
+ * Design principles:
+ * - All writes go through writeCoinTransaction() — NEVER direct
+ * - writeCoinTransaction mirrors every entry to loyaltyTransactions (top-level)
+ * - awardBookingCoins / reverseBookingCoins are idempotent
+ * - Tier can only be UPGRADED automatically; downgrades require admin action
+ * - Referral coins have affectsTier=false and are excluded from tier math
+ * - Coins expire 24 months after createdAt (status="expired", not deleted)
+ * - Redemption is capped at 30% of the Omnia service fee — FIFO deduction
+ * - Every admin action writes to auditLogs with actionType + details
+ *
+ * Coin rate: 1,000 coins per ETB 100,000 of Omnia service value
+ *   → coins = floor(value / 100_000) × 1_000
+ *   → equivalent to 1 coin per 100 ETB (same ratio as before, different constants)
+>>>>>>> f4026fc (fix package)
  */
 
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
@@ -285,7 +305,11 @@ export async function writeCoinTransaction(params: {
   // 1. Write to users/{uid}/coinsHistory
   const historyRef = collection(db, "users", params.userId, "coinsHistory");
   const txRef = await addDoc(historyRef, txData);
+<<<<<<< HEAD
   logger.log(
+=======
+  console.log(
+>>>>>>> f4026fc (fix package)
     "[writeCoinTransaction] coinsHistory written:",
     txRef.id,
     "amount:", params.amount,
@@ -314,12 +338,17 @@ export async function writeCoinTransaction(params: {
     if (isEarnType) {
       userUpdate.totalCoinsEarned = increment(params.amount);
     }
+<<<<<<< HEAD
     // Maintain a running tierCoins aggregate to avoid O(n) subcollection scans
     if (affectsTier && params.amount > 0) {
       userUpdate.tierCoins = increment(params.amount);
     }
     await setDoc(doc(db, "users", params.userId), userUpdate, { merge: true });
     logger.log(
+=======
+    await setDoc(doc(db, "users", params.userId), userUpdate, { merge: true });
+    console.log(
+>>>>>>> f4026fc (fix package)
       "[writeCoinTransaction] user balance updated for:", params.userId,
       "by:", params.amount
     );
@@ -332,7 +361,11 @@ export async function writeCoinTransaction(params: {
 
 /**
  * Award 1,000 welcome coins when a new user registers.
+<<<<<<< HEAD
  * Idempotent — checks for existing welcome_bonus transaction before awarding.
+=======
+ * Safe to call immediately after user doc creation — uses setDoc merge.
+>>>>>>> f4026fc (fix package)
  */
 export async function awardWelcomeBonus(userId: string): Promise<void> {
   const db = await getFirebaseDb();
@@ -340,6 +373,7 @@ export async function awardWelcomeBonus(userId: string): Promise<void> {
   if (!db || !modules.firestore) return;
 
   try {
+<<<<<<< HEAD
     const { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp, increment } = modules.firestore;
 
     // Idempotency guard — prevent double welcome bonus
@@ -354,6 +388,8 @@ export async function awardWelcomeBonus(userId: string): Promise<void> {
       return;
     }
 
+=======
+>>>>>>> f4026fc (fix package)
     await writeCoinTransaction({
       userId,
       amount: 1_000,
@@ -364,9 +400,15 @@ export async function awardWelcomeBonus(userId: string): Promise<void> {
       affectsTier: true,
       status: "active",
     });
+<<<<<<< HEAD
     logger.log("[awardWelcomeBonus] 1,000 welcome coins awarded to:", userId);
   } catch (err) {
     logger.error("[awardWelcomeBonus] Failed:", err);
+=======
+    console.log("[awardWelcomeBonus] 1,000 welcome coins awarded to:", userId);
+  } catch (err) {
+    console.error("[awardWelcomeBonus] Failed:", err);
+>>>>>>> f4026fc (fix package)
     // Non-fatal — don't block registration
   }
 }
@@ -405,9 +447,15 @@ export async function awardBookingCoins(bookingId: string): Promise<void> {
   const userId: string = booking.userId;
   const value: number = booking.omniaServiceValue || 0;
 
+<<<<<<< HEAD
   if (!userId) { logger.log("[awardBookingCoins] Missing userId"); return; }
   if (booking.paymentStatus !== "paid") {
     logger.log("[awardBookingCoins] Payment not paid:", booking.paymentStatus);
+=======
+  if (!userId) { console.log("[awardBookingCoins] Missing userId"); return; }
+  if (booking.paymentStatus !== "paid") {
+    console.log("[awardBookingCoins] Payment not paid:", booking.paymentStatus);
+>>>>>>> f4026fc (fix package)
     return;
   }
 
@@ -530,6 +578,7 @@ export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
   const totalSpend: number = data.totalSpend ?? 0;
   const currentTier: TierName = data.tier ?? "Hope";
 
+<<<<<<< HEAD
   // Prefer the pre-aggregated tierCoins field (avoids O(n) subcollection scan).
   // Falls back to summing coinsHistory for accounts created before this field existed.
   let tierCoins: number;
@@ -552,6 +601,25 @@ export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
     } catch {
       tierCoins = data.totalCoinsEarned ?? 0;
     }
+=======
+  // Calculate tier-affecting coins only (exclude referral)
+  // Sum coins from coinsHistory where affectsTier === true and amount > 0
+  let tierCoins = 0;
+  try {
+    const histSnap = await getDocs(
+      query(
+        collection(db, "users", userId, "coinsHistory"),
+        where("affectsTier", "==", true)
+      )
+    );
+    histSnap.forEach((d: any) => {
+      const amt = d.data().amount ?? d.data().coins ?? 0;
+      if (amt > 0) tierCoins += amt;
+    });
+  } catch {
+    // Fallback: use totalCoinsEarned if subcollection query fails
+    tierCoins = data.totalCoinsEarned ?? 0;
+>>>>>>> f4026fc (fix package)
   }
 
   const currentIdx = TIERS.findIndex((t) => t.name === currentTier);
@@ -578,7 +646,11 @@ export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
     changedAt: serverTimestamp(),
   });
 
+<<<<<<< HEAD
   logger.log("[evaluateAndUpgradeTier] Upgraded:", userId, "from", currentTier, "to", newTier);
+=======
+  console.log("[evaluateAndUpgradeTier] Upgraded:", userId, "from", currentTier, "to", newTier);
+>>>>>>> f4026fc (fix package)
 }
 
 // ── Referral coins ────────────────────────────────────────────────────────────
@@ -643,7 +715,11 @@ export async function awardReferralCoins(params: {
   });
 
   // NOTE: Do NOT call evaluateAndUpgradeTier for referral coins
+<<<<<<< HEAD
   logger.log("[awardReferralCoins] Referral coins awarded:", coins, "to", params.referrerId, "(no tier impact)");
+=======
+  console.log("[awardReferralCoins] Referral coins awarded:", coins, "to", params.referrerId, "(no tier impact)");
+>>>>>>> f4026fc (fix package)
 }
 
 // ── Coin redemption (FIFO) ────────────────────────────────────────────────────
