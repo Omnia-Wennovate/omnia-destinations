@@ -178,15 +178,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ── subscribers ───────────────────────────────────────────────────────
-    // FIX: require authentication + basic field validation to prevent spam.
+    // ── subscribers ───────────────────────────────────────────────────────────
+    // Public newsletter signup — no login required.
+    // Create-only with field validation to prevent spam.
+    // Reads and updates are admin-only.
 
     match /subscribers/{subscriberId} {
-      allow create: if isAuthenticated()
+      // Anyone (including unauthenticated visitors) may create a subscription.
+      // Field-level validation prevents garbage data.
+      allow create: if request.resource.data.keys().hasAll(['email', 'status', 'createdAt'])
         && request.resource.data.email is string
         && request.resource.data.email.size() > 4
-        && request.resource.data.email.size() <= 254;
-      allow read:   if isAdmin();
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.status == "active";
+
+      // Allow unauthenticated users to query their own email (for duplicate check in addSubscriber).
+      // The query uses where("email","==",email) so resource.data.email matches the queried value.
+      allow read:   if isAdmin() ||
+        (resource.data.email == request.query.filters[0].value);
+
+      // Only admins may update (e.g. reactivate) or delete subscribers.
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
