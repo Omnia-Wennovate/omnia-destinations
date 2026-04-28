@@ -160,6 +160,13 @@ export async function awardReferralCoinsAdmin(params: {
   relatedBookingId: string;
 }): Promise<void> {
   const db = getAdminDb();
+
+  // Self-referral guard
+  if (params.referrerId === params.referredUserId) {
+    console.warn("[awardReferralCoinsAdmin] Ignored: self-referral detected for user:", params.referrerId);
+    return;
+  }
+
   const idempotencyKey = `${params.referrerId}_${params.referredUserId}_${params.relatedBookingId}`;
   const referralRef = db.collection("referrals").doc(idempotencyKey);
 
@@ -168,9 +175,23 @@ export async function awardReferralCoinsAdmin(params: {
 
   const coins = REFERRAL_COINS[params.referralType];
 
-  // Fetch referrer tier (for record only — no multiplier on referrals)
-  const referrerSnap = await db.collection("users").doc(params.referrerId).get();
+  // Validate both users exist + fetch referrer tier
+  const [referrerSnap, referredSnap] = await Promise.all([
+    db.collection("users").doc(params.referrerId).get(),
+    db.collection("users").doc(params.referredUserId).get(),
+  ]);
+
+  if (!referrerSnap.exists) {
+    console.error("[awardReferralCoinsAdmin] Referrer not found:", params.referrerId);
+    return;
+  }
+  if (!referredSnap.exists) {
+    console.error("[awardReferralCoinsAdmin] Referred user not found:", params.referredUserId);
+    return;
+  }
+
   const referrerTier: TierName = referrerSnap.data()?.tier ?? "Hope";
+  console.log("Referral reward triggered:", params.relatedBookingId, "→ referrer:", params.referrerId, "gets", coins, "coins");
 
   const exp = new Date();
   exp.setMonth(exp.getMonth() + COINS_EXPIRY_MONTHS);
@@ -206,6 +227,7 @@ export async function awardReferralCoinsAdmin(params: {
     db.collection("users").doc(params.referrerId),
     {
       loyaltyPoints: FieldValue.increment(coins),
+      tierCoins: FieldValue.increment(coins),   // referral coins count toward tier
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }

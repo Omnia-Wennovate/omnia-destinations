@@ -36,6 +36,16 @@ export default function SignupPage() {
     }
   }, [isInitialized, isAuthenticated, user, router])
 
+  // ── Capture referral code from URL (?ref=CODE) and persist to localStorage ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
+    if (ref) {
+      console.log('Referral code captured:', ref)
+      localStorage.setItem('refCode', ref.toUpperCase().trim())
+    }
+  }, [])
+
   const handleSocialAuth = async (provider: 'google' | 'apple') => {
     try {
       setSocialLoading(provider)
@@ -165,7 +175,9 @@ const onSubmit = async (data: SignupFormData) => {
     } = firestore
 
     const myReferralCode = generateReferralCode()
-    const usedCode = data.referralCodeUsed?.trim().toUpperCase() || ''
+    // Check form field first, then fall back to localStorage (set from referral link)
+    const storedRefCode = localStorage.getItem('refCode') || ''
+    const usedCode = (data.referralCodeUsed?.trim().toUpperCase() || storedRefCode.toUpperCase()).trim()
 
     let validReferralCode = ''
     let referredBy = '' // referrer's UID — used later to award referral coins
@@ -181,12 +193,16 @@ const onSubmit = async (data: SignupFormData) => {
       if (!snapshot.empty) {
         const referrerDoc = snapshot.docs[0]
 
-        await updateDoc(referrerDoc.ref, {
-          totalReferrals: increment(1),
-        })
+        // Prevent self-referral
+        if (referrerDoc.id !== firebaseUser.uid) {
+          await updateDoc(referrerDoc.ref, {
+            totalReferrals: increment(1),
+          })
 
-        validReferralCode = usedCode
-        referredBy = referrerDoc.id // store the referrer's UID
+          validReferralCode = usedCode
+          referredBy = referrerDoc.id // store the referrer's UID
+          console.log('ReferredBy set:', referredBy)
+        }
       }
     }
 
@@ -212,6 +228,9 @@ const onSubmit = async (data: SignupFormData) => {
     await awardWelcomeBonus(firebaseUser.uid)
 
     await signOut(auth)
+
+    // Clean up referral code from localStorage after successful signup
+    localStorage.removeItem('refCode')
 
     alert('Account created successfully. Please login.')
 

@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const { onAuthStateChanged } = modules.auth
-      const { doc, getDoc } = modules.firestore || {}
+      const { doc, getDoc, updateDoc } = modules.firestore || {}
 
       unsubscribe = onAuthStateChanged(auth, async (firebaseUser: any) => {
         if (firebaseUser) {
@@ -49,6 +49,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               const userData = userDocSnap.exists() ? userDocSnap.data() : null
               const role = adminDocSnap.exists() ? 'ADMIN' : (userData?.role || 'USER')
+
+              // Backfill missing referralCode for existing users
+              if (userData && !userData.referralCode && updateDoc) {
+                try {
+                  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                  const arr = new Uint8Array(6)
+                  crypto.getRandomValues(arr)
+                  const newCode = 'OM' + Array.from(arr).map((b: number) => chars[b % chars.length]).join('')
+                  await updateDoc(userDocRef, { referralCode: newCode })
+                  userData.referralCode = newCode
+                } catch {
+                  // Non-fatal — user still loads normally
+                }
+              }
 
               setUser({
                 id:        firebaseUser.uid,
