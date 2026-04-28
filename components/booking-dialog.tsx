@@ -120,44 +120,6 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
       }
 
       setBookingError(null)
-      setIsSubmitting(true)
-      
-      try {
-        if (user?.id) {
-          const userBookings = await getUserBookings(user.id)
-          const dur = typeof packageData.duration === 'string' ? parseInt(packageData.duration) : packageData.duration
-          const newDuration = isNaN(dur) || dur <= 0 ? 1 : dur
-          
-          const newStart = new Date(formData.travelDate)
-          const newEnd = new Date(newStart)
-          newEnd.setDate(newEnd.getDate() + newDuration - 1)
-          
-          newStart.setHours(0,0,0,0)
-          newEnd.setHours(0,0,0,0)
-          
-          for (const b of userBookings) {
-            if (b.bookingStatus === 'cancelled') continue
-            if (!b.travelDate) continue
-            
-            const existingStart = new Date(b.travelDate)
-            existingStart.setHours(0,0,0,0)
-            const existingDur = b.durationDays || 1
-            const existingEnd = new Date(existingStart)
-            existingEnd.setDate(existingEnd.getDate() + existingDur - 1)
-            existingEnd.setHours(0,0,0,0)
-            
-            if (newStart <= existingEnd && newEnd >= existingStart) {
-              setBookingError("This booking overlaps with one of your existing trips.")
-              setIsSubmitting(false)
-              return
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error checking date overlap:", error)
-      } finally {
-        setIsSubmitting(false)
-      }
     }
     
     if (step < 3) setStep(step + 1)

@@ -1,8 +1,5 @@
 /**
  * Omnia Loyalty Program — Core Service (v2)
-<<<<<<< HEAD
- * ...(see original header for full design notes)
-=======
  *
  * Single source of truth for all coin calculation, tier evaluation,
  * referral logic, expiry, redemption, and admin overrides.
@@ -17,10 +14,8 @@
  * - Redemption is capped at 30% of the Omnia service fee — FIFO deduction
  * - Every admin action writes to auditLogs with actionType + details
  *
- * Coin rate: 1,000 coins per ETB 100,000 of Omnia service value
- *   → coins = floor(value / 100_000) × 1_000
- *   → equivalent to 1 coin per 100 ETB (same ratio as before, different constants)
->>>>>>> f4026fc (fix package)
+ * Coin rate: 1 coin per 100 ETB of Omnia service value
+ *   → coins = floor(omniaServiceValue / 100) × tierMultiplier
  */
 
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
@@ -141,11 +136,12 @@ export interface CoinTransaction {
 // ── Pure calculation helpers (no Firestore) ───────────────────────────────────
 
 /**
- * Base coins = floor(omniaServiceValue / 100,000) × 1,000
- * e.g. ETB 200,000 → 2,000 coins (before tier multiplier)
+ * Base coins = floor(omniaServiceValue / 100)
+ * i.e. 1 coin per 100 ETB of Omnia service value
+ * e.g. ETB 70,000 → 700 coins (before tier multiplier)
  */
 export function calculateBaseCoins(omniaServiceValue: number): number {
-  return Math.floor(omniaServiceValue / ETB_PER_100K) * COINS_PER_100K;
+  return Math.floor(omniaServiceValue / 100);
 }
 
 /** Apply tier multiplier to base coins */
@@ -240,6 +236,7 @@ export async function writeCoinTransaction(params: {
   affectsTier?: boolean;
   /** Pass false to skip updating loyaltyPoints (used during FIFO deduction) */
   updateBalance?: boolean;
+
 }): Promise<string> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
@@ -424,15 +421,24 @@ export async function awardBookingCoins(bookingId: string): Promise<void> {
   }
 
   const userId: string = booking.userId;
-  const value: number = booking.omniaServiceValue || 0;
+  // Fall back to computing omniaServiceValue from totalAmount when missing or 0
+  // (same formula as createBooking: Math.floor(totalAmount * 0.10))
+  let value: number = booking.omniaServiceValue || 0;
+  if (value <= 0) {
+    const totalAmount = Number(booking.totalAmount ?? booking.amount ?? 0);
+    value = Math.floor(totalAmount * 0.10);
+    console.log("[awardBookingCoins] omniaServiceValue was 0/missing — computed from totalAmount:", value);
+  }
 
   if (!userId) { logger.log("[awardBookingCoins] Missing userId"); return; }
   if (booking.paymentStatus !== "paid") {
     logger.log("[awardBookingCoins] Payment not paid:", booking.paymentStatus);
     return;
   }
-
-  // Resolve current tier for multiplier
+  if (booking.bookingStatus !== "completed" && booking.bookingStatus !== "confirmed") {
+    logger.log("[awardBookingCoins] Booking not completed/confirmed yet");
+    return;
+  }
   const userSnap = await getDoc(doc(db, "users", userId));
   const userData = userSnap.exists() ? (userSnap.data() as any) : {};
   const currentTier: TierName = userData.tier ?? "Hope";

@@ -188,12 +188,31 @@ export default function AdminBookingsPage() {
   // ── Status update handlers ─────────────────────────────────────
   async function handleUpdateBookingStatus(bookingId: string, newStatus: "confirmed" | "pending" | "cancelled" | "completed") {
     try {
-      await updateBookingStatus(bookingId, newStatus)
-      setBookings((prev) =>
-        prev.map((b) => b.id === bookingId ? { ...b, bookingStatus: newStatus } : b)
-      )
-    } catch {
-      // silent
+      if (newStatus === 'completed' || newStatus === 'confirmed') {
+        console.log('🔥 Calling approve-booking API for:', bookingId, 'with status:', newStatus)
+        // Use server-side API for approval — atomic status + loyalty in one round-trip
+        const res = await fetch('/api/admin/approve-booking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, adminId: user?.id || 'admin', targetStatus: newStatus }),
+        })
+        const data = await res.json()
+        console.log('📦 API response:', res.status, data)
+        if (!res.ok) {
+          throw new Error(data.error || 'Approval failed')
+        }
+        setBookings((prev) =>
+          prev.map((b) => b.id === bookingId ? { ...b, bookingStatus: newStatus as "confirmed" | "completed", paymentStatus: 'paid' as const } : b)
+        )
+        console.log('✅ Booking approved successfully:', bookingId)
+      } else {
+        await updateBookingStatus(bookingId, newStatus)
+        setBookings((prev) =>
+          prev.map((b) => b.id === bookingId ? { ...b, bookingStatus: newStatus } : b)
+        )
+      }
+    } catch (err) {
+      console.error('❌ handleUpdateBookingStatus failed:', err)
     }
   }
 

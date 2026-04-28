@@ -88,6 +88,18 @@ function getTierConfig(tier: string) {
   return TIER_CONFIG.find(t => t.name === tier) ?? TIER_CONFIG[0]
 }
 
+//
+function getMonthsLeft(expiryDate: string) {
+  const expiry = new Date(expiryDate)
+  const now = new Date()
+
+  const yearsDiff = expiry.getFullYear() - now.getFullYear()
+  const monthsDiff = expiry.getMonth() - now.getMonth()
+
+  return yearsDiff * 12 + monthsDiff
+}
+//
+
 function getTierProgress(tier: string, totalCoinsEarned: number, totalPackages: number, totalSpend: number) {
   const currentIdx = TIER_CONFIG.findIndex(t => t.name === tier)
   if (currentIdx === TIER_CONFIG.length - 1) return null // already Royal
@@ -160,6 +172,36 @@ export default function DashboardPage() {
       }
     }
   }, [isInitialized, isAuthenticated, user, router])
+
+
+  //
+useEffect(() => {
+  if (!passport || !user?.id) return
+
+  const monthsLeft = getMonthsLeft(passport.expiryDate)
+
+  const key = `passport_notified_${user.id}`
+  const alreadyNotified = localStorage.getItem(key)
+
+  if (Notification.permission !== 'granted') {
+    Notification.requestPermission()
+  }
+
+  if (monthsLeft <= 8 && monthsLeft > 0 && !alreadyNotified) {
+    if (Notification.permission === 'granted') {
+      new Notification('⚠️ Passport Expiry Warning', {
+        body: `Your passport expires in ${monthsLeft} month(s). Please renew it.`,
+      })
+    }
+
+    localStorage.setItem(key, 'true')
+  }
+
+  if (monthsLeft > 8) {
+    localStorage.removeItem(key)
+  }
+}, [passport, user])
+  //
 
   // Real-time listener: users/{uid} → profile (tier, loyaltyPoints, etc.)
   useEffect(() => {
@@ -675,6 +717,15 @@ export default function DashboardPage() {
 
                     {/* ── Existing passport display ── */}
                     {passport && (() => {
+
+                      //
+                      {passport && getMonthsLeft(passport.expiryDate) <= 8 && (
+  <div className="mt-3 p-3 rounded-lg bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-sm font-medium">
+    ⚠️ Your passport will expire in less than 8 months. Please renew it soon.
+  </div>
+)}
+
+                      //
                       const daysLeft = calcDaysLeft(passport.expiryDate)
                       const status  = getPassportStatus(daysLeft)
                       return (

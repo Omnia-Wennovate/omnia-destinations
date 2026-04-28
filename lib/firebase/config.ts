@@ -3,13 +3,13 @@ import { getFirestore } from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 // Firebase config
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyCLLCAiSuur1BkPXNMK4ZdwWZz9iJrxi0o",
+  authDomain: "omnia-destination.firebaseapp.com",
+  projectId: "omnia-destination",
+  storageBucket: "omnia-destination.firebasestorage.app",
+  messagingSenderId: "986256189203",
+  appId: "1:986256189203:web:a5bd3faa212cb2e319dce6",
+  measurementId: "G-F65DZ73XD7"
 };
 
 const isFirebaseConfigured = !!(firebaseConfig.apiKey && firebaseConfig.projectId)

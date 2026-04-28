@@ -102,33 +102,27 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     );
   }
 
-  // 2. Overlap detection
-  const newDuration = pkg.duration > 0 ? pkg.duration : 1;
-  const newStart = new Date(data.travelDate);
-  const newEnd = new Date(newStart);
-  newEnd.setDate(newEnd.getDate() + newDuration - 1);
+  // 2. Active booking cap + overlap detection
+  // Fetch all user bookings once (reuse for both checks)
+  const allUserBookingsSnap = await getDocs(
+    query(
+      collection(db, "bookings"),
+      where("userId", "==", data.userId)
+    )
+  );
 
-  // Set time of both to 00:00:00 to avoid time shift issues
-  newStart.setHours(0,0,0,0);
-  newEnd.setHours(0,0,0,0);
+  // Filter to only active bookings (exclude cancelled & rejected)
+  const EXCLUDED_STATUSES = ["cancelled", "rejected"];
+  const activeBookings = allUserBookingsSnap.docs.filter((d: any) => {
+    const status = d.data().bookingStatus;
+    return !EXCLUDED_STATUSES.includes(status);
+  });
 
-  const userBookings = await getUserBookings(data.userId);
-
-  for (const b of userBookings) {
-    if (b.bookingStatus === 'cancelled') continue;
-    if (!b.travelDate) continue;
-
-    const existingStart = new Date(b.travelDate);
-    existingStart.setHours(0,0,0,0);
-    const existingDur = (b as any).durationDays || 1;
-    
-    const existingEnd = new Date(existingStart);
-    existingEnd.setDate(existingEnd.getDate() + existingDur - 1);
-    existingEnd.setHours(0,0,0,0);
-
-    if (newStart <= existingEnd && newEnd >= existingStart) {
-      throw new Error("This booking overlaps with one of your existing trips.");
-    }
+  // 2a. Enforce global cap: max 35 active bookings per user
+  if (activeBookings.length >= 35) {
+    throw new Error(
+      "You have reached the maximum booking limit (35). Please cancel an existing booking before making a new one."
+    );
   }
 
   // Compute omniaServiceValue server-side from trusted package data — NEVER use client-provided value.
@@ -372,6 +366,8 @@ async function tryAwardReferralCoins(bookingId: string): Promise<void> {
   }
 }
 
+import { triggerLoyaltyCoinsAdmin } from "@/lib/actions/loyalty.actions";
+
 // Update booking status (admin)
 export async function updateBookingStatus(
   bookingId: string,
@@ -391,10 +387,9 @@ export async function updateBookingStatus(
     updatedAt: serverTimestamp(),
   });
 
-  if (bookingStatus === "completed") {
-    await awardBookingCoins(bookingId);
-    await tryAwardReferralCoins(bookingId);
-  } else if (bookingStatus === "cancelled") {
+  // Loyalty for "completed" is handled exclusively by /api/admin/approve-booking
+  // Only handle cancellation reversal here
+  if (bookingStatus === "cancelled") {
     await reverseBookingCoins(bookingId);
   }
 }
@@ -456,10 +451,7 @@ export async function updatePaymentStatus(
     updatedAt: serverTimestamp(),
   });
 
-  if (paymentStatus === "paid") {
-    await awardBookingCoins(bookingId);
-    await tryAwardReferralCoins(bookingId);
-  } else if (paymentStatus === "refunded") {
+  if (paymentStatus === "refunded") {
     await reverseBookingCoins(bookingId);
   }
 }

@@ -13,10 +13,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
-import {
-  awardBookingCoinsAdmin,
-  awardReferralCoinsAdmin,
-} from "@/lib/services/loyalty.admin";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,61 +126,27 @@ export async function GET(req: NextRequest) {
     const db = getAdminDb();
     const bookingRef = db.collection("bookings").doc(booking.id);
 
-    let alreadyPaid = false;
+    let alreadyProcessed = false;
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(bookingRef);
       if (!snap.exists) throw new Error("Booking disappeared during transaction");
-      if (snap.data()?.paymentStatus === "paid") {
-        alreadyPaid = true;
+      if (snap.data()?.bookingStatus === "pending_approval") {
+        alreadyProcessed = true;
         return; // Idempotent — already processed
       }
       tx.update(bookingRef, {
-        paymentStatus: "paid",
-        bookingStatus: "completed",
+        paymentStatus: "pending",
+        bookingStatus: "pending_approval",
         updatedAt: FieldValue.serverTimestamp(),
       });
     });
 
-    if (alreadyPaid) {
+    if (alreadyProcessed) {
       return NextResponse.redirect(new URL("/dashboard?payment=success", req.url));
     }
 
-    // ── Step 6: Award loyalty coins (atomic, server-side, once) ────────────
-    try {
-      await awardBookingCoinsAdmin(booking.id);
-    } catch (err) {
-      // Non-fatal — coins can be awarded manually by admin if needed
-      console.error("[verify-payment] awardBookingCoinsAdmin failed:", err);
-    }
-
-    // ── Step 7: Award referral coins if this user was referred ────────────────
-    try {
-      const referredBy: string = booking.referredBy ?? "";
-      const bookingDb = getAdminDb();
-      if (!referredBy) {
-        // Check the user doc for referredBy field
-        const userSnap = await bookingDb.collection("users").doc(booking.userId).get();
-        const userData = userSnap.data() ?? {};
-        if (userData.referredBy) {
-          await awardReferralCoinsAdmin({
-            referrerId: userData.referredBy,
-            referredUserId: booking.userId,
-            referralType: "individual",
-            relatedBookingId: booking.id,
-          });
-        }
-      } else {
-        await awardReferralCoinsAdmin({
-          referrerId: referredBy,
-          referredUserId: booking.userId,
-          referralType: "individual",
-          relatedBookingId: booking.id,
-        });
-      }
-    } catch (err) {
-      // Non-fatal
-      console.error("[verify-payment] awardReferralCoinsAdmin failed:", err);
-    }
+    // Coins (loyalty and referral) are now awarded manually via Admin Approval
+    // when the admin changes the bookingStatus to "completed".
 
     return NextResponse.redirect(new URL("/dashboard?payment=success", req.url));
   } catch (error) {

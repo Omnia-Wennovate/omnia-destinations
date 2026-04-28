@@ -50,10 +50,28 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
       return;
     }
 
-    const userId: string = booking.userId;
-    const value: number = Number(booking.omniaServiceValue ?? 0);
+    if (booking.bookingStatus !== "completed" && booking.bookingStatus !== "confirmed") {
+      console.error("[awardBookingCoinsAdmin] Booking not completed/confirmed yet:", bookingId);
+      return;
+    }
 
-    if (!userId) return;
+    console.log("✅ Conditions met for booking:", bookingId);
+    console.log("🎯 Awarding coins...");
+
+    const userId: string = booking.userId;
+    // Fall back to computing omniaServiceValue from totalAmount when missing or 0
+    // (same formula as createBooking: Math.floor(totalAmount * 0.10))
+    let value: number = Number(booking.omniaServiceValue ?? 0);
+    if (value <= 0) {
+      const totalAmount = Number(booking.totalAmount ?? booking.amount ?? 0);
+      value = Math.floor(totalAmount * 0.10);
+      console.warn("⚠️ omniaServiceValue was 0/missing for booking:", bookingId, "— computed from totalAmount:", value);
+    }
+
+    if (!userId) {
+      console.error("❌ Missing userId on booking:", bookingId);
+      return;
+    }
 
     // Fetch user inside transaction for tier info
     const userRef = db.collection("users").doc(userId);
@@ -63,6 +81,15 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
 
     const coins = calculateBookingCoins(value, currentTier);
     const multiplier = getTierMultiplier(currentTier);
+
+    console.log("🔢 Coin calculation:", {
+      bookingId,
+      userId,
+      omniaServiceValue: value,
+      tier: currentTier,
+      multiplier,
+      coinsAwarded: coins,
+    });
 
     // Compute expiry date
     const exp = new Date();
