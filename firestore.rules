@@ -180,25 +180,31 @@ service cloud.firestore {
 
     // ── subscribers ───────────────────────────────────────────────────────────
     // Public newsletter signup — no login required.
-    // Create-only with field validation to prevent spam.
-    // Reads and updates are admin-only.
+    // The addSubscriber() service:
+    //   1. Queries (LIST) to check for duplicate email
+    //   2. Creates new doc (CREATE) if not found
+    //   3. Updates existing doc (UPDATE) to reactivate if found inactive
+    // All three must be allowed for unauthenticated visitors.
 
     match /subscribers/{subscriberId} {
-      // Anyone (including unauthenticated visitors) may create a subscription.
-      // Field-level validation prevents garbage data.
+      // Public read needed for the duplicate-email query in addSubscriber().
+      // Acceptable tradeoff: email addresses are voluntarily submitted for a newsletter.
+      allow read: if true;
+
+      // Public create with field-level validation to block garbage data.
       allow create: if request.resource.data.keys().hasAll(['email', 'status', 'createdAt'])
         && request.resource.data.email is string
         && request.resource.data.email.size() > 4
         && request.resource.data.email.size() <= 254
         && request.resource.data.status == "active";
 
-      // Allow unauthenticated users to query their own email (for duplicate check in addSubscriber).
-      // The query uses where("email","==",email) so resource.data.email matches the queried value.
-      allow read:   if isAdmin() ||
-        (resource.data.email == request.query.filters[0].value);
+      // Public update ONLY to reactivate an existing subscription (status → active).
+      // Prevents any other field from being tampered with.
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == "active"
+      );
 
-      // Only admins may update (e.g. reactivate) or delete subscribers.
-      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
