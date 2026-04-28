@@ -195,9 +195,15 @@ const onSubmit = async (data: SignupFormData) => {
 
         // Prevent self-referral
         if (referrerDoc.id !== firebaseUser.uid) {
-          await updateDoc(referrerDoc.ref, {
-            totalReferrals: increment(1),
-          })
+          // Increment referrer's count — non-blocking so signup completes even if this fails
+          try {
+            await updateDoc(referrerDoc.ref, {
+              totalReferrals: increment(1),
+            })
+            console.log('totalReferrals incremented for:', referrerDoc.id)
+          } catch (e) {
+            console.error('Failed to increment totalReferrals (non-fatal):', e)
+          }
 
           validReferralCode = usedCode
           referredBy = referrerDoc.id // store the referrer's UID

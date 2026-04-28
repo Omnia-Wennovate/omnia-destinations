@@ -37,7 +37,10 @@ service cloud.firestore {
     // ── users ─────────────────────────────────────────────────────────────
 
     match /users/{userId} {
-      allow read:   if isOwner(userId) || isAdmin();
+      // isAuthenticated() also allowed so the referral lookup query at signup
+      // (where referralCode == code) can read the referrer's document.
+      // Without this, the query is silently denied and referrals never work.
+      allow read:   if isOwner(userId) || isAdmin() || isAuthenticated();
       allow create: if isOwner(userId);
       // Users may update only safe profile fields.
       // ALL loyalty/tier/role fields are exclusively written by backend
@@ -55,7 +58,12 @@ service cloud.firestore {
                             'totalSpend', 'referredBy', 'referralCode',
                             'referralCodeUsed', 'totalReferrals'
                           ]))
-                    || isAdmin();
+                    || isAdmin()
+                    // Allow any authenticated user to increment ONLY totalReferrals by 1.
+                    // Uses get() with default 0 so the rule works even when field is missing.
+                    || (isAuthenticated() &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalReferrals']) &&
+                        request.resource.data.totalReferrals == resource.data.get('totalReferrals', 0) + 1);
       allow delete: if isAdmin();
 
       // coinsHistory — ADMIN ONLY writes (system writes via Admin SDK bypass rules).
