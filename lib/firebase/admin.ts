@@ -14,7 +14,14 @@ function getAdminApp(): App {
 
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  // Normalize the private key to handle all Vercel/local env var formats:
+  //  - Local .env:  literal \n in the string (Node dotenv parses them as real newlines)
+  //  - Vercel UI:   may store as \\n (double-escaped) or as a single-line with literal "\n"
+  // We strip surrounding quotes first (if any), then replace every variant of \n with a real newline.
+  const rawKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "";
+  const privateKey = rawKey
+    .replace(/^["']|["']$/g, "")   // strip accidental surrounding quotes
+    .replace(/\\n/g, "\n");         // convert escaped \n → real newline
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
