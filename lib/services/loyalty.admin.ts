@@ -150,14 +150,18 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
 // ── Award referral coins (server-side) ────────────────────────────────────────
 
 /**
- * Award referral coins after a booking completes — server-side version.
+ * Award referral coins — server-side version.
+ * Supports both booking-based and signup-based referral rewards.
  * Idempotent via referrals/{idempotencyKey} guard document.
+ *
+ * For signup referrals: pass referralType="signup" and omit relatedBookingId.
+ * The idempotency key becomes: `${referrerId}_${referredUserId}_signup`
  */
 export async function awardReferralCoinsAdmin(params: {
   referrerId: string;
   referredUserId: string;
   referralType: ReferralType;
-  relatedBookingId: string;
+  relatedBookingId?: string;
 }): Promise<void> {
   const db = getAdminDb();
 
@@ -167,11 +171,16 @@ export async function awardReferralCoinsAdmin(params: {
     return;
   }
 
-  const idempotencyKey = `${params.referrerId}_${params.referredUserId}_${params.relatedBookingId}`;
+  // Idempotency key: uses bookingId for booking referrals, "signup" for signup referrals
+  const idempotencySuffix = params.relatedBookingId || "signup";
+  const idempotencyKey = `${params.referrerId}_${params.referredUserId}_${idempotencySuffix}`;
   const referralRef = db.collection("referrals").doc(idempotencyKey);
 
   const existing = await referralRef.get();
-  if (existing.exists && existing.data()?.status === "completed") return;
+  if (existing.exists && existing.data()?.status === "completed") {
+    console.log("[awardReferralCoinsAdmin] Referral signup reward skipped (already exists):", idempotencyKey);
+    return;
+  }
 
   const coins = REFERRAL_COINS[params.referralType];
 
@@ -191,7 +200,15 @@ export async function awardReferralCoinsAdmin(params: {
   }
 
   const referrerTier: TierName = referrerSnap.data()?.tier ?? "Hope";
-  console.log("Referral reward triggered:", params.relatedBookingId, "→ referrer:", params.referrerId, "gets", coins, "coins");
+
+  // Determine transaction type and reason based on referral source
+  const isSignupReferral = params.referralType === "signup";
+  const txType = isSignupReferral ? "referral_signup" : "referral";
+  const reason = isSignupReferral
+    ? `Referral signup reward: new user signed up with referral code`
+    : `Referral reward (${params.referralType}): referred client completed travel`;
+
+  console.log("Referral reward triggered:", idempotencySuffix, "→ referrer:", params.referrerId, "gets", coins, "coins", `(${txType})`);
 
   const exp = new Date();
   exp.setMonth(exp.getMonth() + COINS_EXPIRY_MONTHS);
@@ -200,12 +217,12 @@ export async function awardReferralCoinsAdmin(params: {
     userId: params.referrerId,
     coins,
     amount: coins,
-    type: "referral",
+    type: txType,
     affectsTier: false, // referral coins never count toward tier
-    relatedBookingId: params.relatedBookingId,
+    relatedBookingId: params.relatedBookingId || null,
     multiplierApplied: 1,
     tierAtTime: referrerTier,
-    reason: `Referral reward (${params.referralType}): referred client completed travel`,
+    reason,
     createdAt: FieldValue.serverTimestamp(),
     expiresAt: exp.toISOString(),
     status: "active",
@@ -236,7 +253,7 @@ export async function awardReferralCoinsAdmin(params: {
   batch.set(referralRef, {
     referrerId: params.referrerId,
     referredUserId: params.referredUserId,
-    relatedBookingId: params.relatedBookingId,
+    relatedBookingId: params.relatedBookingId || null,
     referralType: params.referralType,
     rewardAmount: coins,
     status: "completed",
@@ -244,4 +261,5 @@ export async function awardReferralCoinsAdmin(params: {
   });
 
   await batch.commit();
+  console.log(`[awardReferralCoinsAdmin] ${isSignupReferral ? "Referral signup reward granted" : "Referral reward granted"}:`, idempotencyKey);
 }

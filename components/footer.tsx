@@ -3,8 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react'
+import { Facebook, Instagram, Mail, Phone, MapPin, CheckCircle2 } from 'lucide-react'
 import { addSubscriber } from '@/lib/services/newsletter.service'
+
+/** TikTok icon — lucide-react doesn't include one, so we use a matching SVG */
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+    </svg>
+  )
+}
 
 const quickLinks = [
   { href: '/destinations', label: 'Destinations' },
@@ -15,10 +24,9 @@ const quickLinks = [
 ]
 
 const socialLinks = [
-  { href: '#', icon: Facebook, label: 'Facebook' },
-  { href: '#', icon: Twitter, label: 'Twitter' },
-  { href: '#', icon: Instagram, label: 'Instagram' },
-  { href: '#', icon: Linkedin, label: 'LinkedIn' },
+  { href: 'https://www.facebook.com/share/1GwnijTTHn/', icon: Facebook, label: 'Facebook' },
+  { href: 'https://www.tiktok.com/@omniadestinations', icon: TikTokIcon, label: 'TikTok' },
+  { href: 'https://www.instagram.com/omniadestinations', icon: Instagram, label: 'Instagram' },
 ]
 
 export function Footer() {
@@ -65,14 +73,16 @@ export function Footer() {
             </p>
             <div className="flex items-center gap-4">
               {socialLinks.map((social) => (
-                <Link
+                <a
                   key={social.label}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-muted-foreground transition-colors hover:text-primary"
                   aria-label={social.label}
                 >
                   <social.icon className="h-5 w-5" />
-                </Link>
+                </a>
               ))}
             </div>
           </div>

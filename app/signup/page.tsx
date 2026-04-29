@@ -8,7 +8,6 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight, Check } from 'lucide-react'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
-import { awardWelcomeBonus } from '@/lib/services/loyalty.service'
 import { signInWithGoogle, signInWithApple } from '@/lib/services/social-auth.service'
 import { signupSchema, type SignupFormData } from '@/lib/validations/auth'
 import { useAuthStore } from '@/store/auth'
@@ -166,51 +165,12 @@ const onSubmit = async (data: SignupFormData) => {
       doc,
       setDoc,
       serverTimestamp,
-      collection,
-      query,
-      where,
-      getDocs,
-      updateDoc,
-      increment,
     } = firestore
 
     const myReferralCode = generateReferralCode()
     // Check form field first, then fall back to localStorage (set from referral link)
     const storedRefCode = localStorage.getItem('refCode') || ''
     const usedCode = (data.referralCodeUsed?.trim().toUpperCase() || storedRefCode.toUpperCase()).trim()
-
-    let validReferralCode = ''
-    let referredBy = '' // referrer's UID — used later to award referral coins
-
-    if (usedCode) {
-      const q = query(
-        collection(db, 'users'),
-        where('referralCode', '==', usedCode)
-      )
-
-      const snapshot = await getDocs(q)
-
-      if (!snapshot.empty) {
-        const referrerDoc = snapshot.docs[0]
-
-        // Prevent self-referral
-        if (referrerDoc.id !== firebaseUser.uid) {
-          // Increment referrer's count — non-blocking so signup completes even if this fails
-          try {
-            await updateDoc(referrerDoc.ref, {
-              totalReferrals: increment(1),
-            })
-            console.log('totalReferrals incremented for:', referrerDoc.id)
-          } catch (e) {
-            console.error('Failed to increment totalReferrals (non-fatal):', e)
-          }
-
-          validReferralCode = usedCode
-          referredBy = referrerDoc.id // store the referrer's UID
-          console.log('ReferredBy set:', referredBy)
-        }
-      }
-    }
 
     await setDoc(doc(db, 'users', firebaseUser.uid), {
       name: fullName,
@@ -224,14 +184,42 @@ const onSubmit = async (data: SignupFormData) => {
       totalSpend: 0,
       annualOmniaValue: 0,
       referralCode: myReferralCode,
-      referralCodeUsed: validReferralCode,
-      referredBy,                // ← referrer's UID (empty string if none)
+      referralCodeUsed: usedCode,
+      referredBy: '',          // server-side API sets this after validating the code
       totalReferrals: 0,
       createdAt: serverTimestamp(),
     })
 
-    // Award 1,000 welcome bonus coins
-    await awardWelcomeBonus(firebaseUser.uid)
+    // ── Process referral server-side (Admin SDK, bypasses Firestore rules) ──
+    if (usedCode) {
+      try {
+        const res = await fetch('/api/referral/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ referralCode: usedCode, newUserId: firebaseUser.uid }),
+        })
+        const result = await res.json()
+        if (result.referrerId) {
+          console.log('ReferredBy set:', result.referrerId)
+        } else {
+          console.log('[referral] process result:', result)
+        }
+      } catch (e) {
+        console.error('[referral] process API failed (non-fatal):', e)
+      }
+      localStorage.removeItem('refCode')
+    }
+
+    // Award 1,000 welcome bonus coins (server-side via Admin SDK — bypasses Firestore rules)
+    try {
+      await fetch('/api/user/welcome-bonus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: firebaseUser.uid }),
+      })
+    } catch (e) {
+      console.error('[welcome-bonus] API call failed (non-fatal):', e)
+    }
 
     await signOut(auth)
 

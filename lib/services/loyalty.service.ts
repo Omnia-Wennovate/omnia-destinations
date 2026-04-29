@@ -99,6 +99,7 @@ export const REFERRAL_COINS = {
   individual: 2_500,
   group: 15_000,
   corporate: 25_000,
+  signup: 500,
 } as const;
 export type ReferralType = keyof typeof REFERRAL_COINS;
 
@@ -107,6 +108,7 @@ export type ReferralType = keyof typeof REFERRAL_COINS;
 export type CoinTransactionType =
   | "booking"
   | "referral"
+  | "referral_signup"
   | "bonus"
   | "welcome_bonus"
   | "admin_adjustment"
@@ -264,7 +266,7 @@ export async function writeCoinTransaction(params: {
   const multiplierApplied = params.multiplierApplied ?? getTierMultiplier(tierAtTime);
 
   // Derive affectsTier from type unless explicitly overridden
-  const NON_TIER_TYPES: CoinTransactionType[] = ["referral", "redemption", "expiry", "reversal"];
+  const NON_TIER_TYPES: CoinTransactionType[] = ["referral", "referral_signup", "redemption", "expiry", "reversal"];
   const affectsTier =
     params.affectsTier !== undefined
       ? params.affectsTier
