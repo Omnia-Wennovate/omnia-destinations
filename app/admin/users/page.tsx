@@ -18,6 +18,7 @@ import {
   Award,
   Minus,
   Plus,
+  Crown,
 } from 'lucide-react'
 import {
   getUsersFromFirestore,
@@ -25,6 +26,7 @@ import {
   adjustLoyaltyPoints,
   type FirestoreUser,
 } from '@/lib/services/users.service'
+import type { TierName } from '@/lib/services/loyalty.service'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,6 +49,52 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+
+// ── Tier Badge ─────────────────────────────────────────────────
+const TIER_STYLES: Record<TierName, { bg: string; text: string; border: string; label: string }> = {
+  Hope: {
+    bg: 'bg-orange-100 dark:bg-orange-950',
+    text: 'text-orange-700 dark:text-orange-300',
+    border: 'border-orange-300 dark:border-orange-700',
+    label: 'Hope',
+  },
+  Explorer: {
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-600 dark:text-slate-300',
+    border: 'border-slate-300 dark:border-slate-600',
+    label: 'Explorer',
+  },
+  Voyager: {
+    bg: 'bg-yellow-100 dark:bg-yellow-950',
+    text: 'text-yellow-700 dark:text-yellow-300',
+    border: 'border-yellow-300 dark:border-yellow-700',
+    label: 'Voyager',
+  },
+  Elite: {
+    bg: 'bg-cyan-100 dark:bg-cyan-950',
+    text: 'text-cyan-700 dark:text-cyan-300',
+    border: 'border-cyan-300 dark:border-cyan-700',
+    label: 'Elite',
+  },
+  Royal: {
+    bg: 'bg-purple-100 dark:bg-purple-950',
+    text: 'text-purple-700 dark:text-purple-300',
+    border: 'border-purple-300 dark:border-purple-700',
+    label: 'Royal',
+  },
+}
+
+function TierBadge({ tier }: { tier: TierName }) {
+  const style = TIER_STYLES[tier] ?? TIER_STYLES.Hope
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style.bg} ${style.text} ${style.border}`}
+    >
+      <Crown className="h-3 w-3" />
+      {style.label}
+    </span>
+  )
+}
 
 // ── Role Badge ─────────────────────────────────────────────────
 function RoleBadge({ role }: { role: string }) {
@@ -96,12 +144,15 @@ function StatCard({
 
 // ── Avatar ─────────────────────────────────────────────────────
 function UserAvatar({ name, email }: { name: string; email: string }) {
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || email[0]?.toUpperCase() || '?'
+  const initials =
+    name
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() ||
+    email[0]?.toUpperCase() ||
+    '?'
 
   return (
     <div className="flex items-center gap-3">
@@ -128,6 +179,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [tierFilter, setTierFilter] = useState<TierName | 'all'>('all')
   const [refreshing, setRefreshing] = useState(false)
 
   // Role dialog
@@ -205,7 +257,12 @@ export default function AdminUsersPage() {
 
     try {
       setAdjustingPoints(true)
-      await adjustLoyaltyPoints(loyaltyTarget.id, actualAmount, user?.id ?? 'admin', 'Manual adjustment by admin')
+      await adjustLoyaltyPoints(
+        loyaltyTarget.id,
+        actualAmount,
+        user?.id ?? 'admin',
+        'Manual adjustment by admin',
+      )
       setUsers((prev) =>
         prev.map((u) =>
           u.id === loyaltyTarget.id
@@ -214,7 +271,7 @@ export default function AdminUsersPage() {
         ),
       )
       toast.success(
-        `Successfully ${loyaltyMode === 'subtract' ? 'subtracted' : 'added'} ${parsed} points ${loyaltyMode === 'subtract' ? 'from' : 'to'} ${loyaltyTarget.name}`
+        `Successfully ${loyaltyMode === 'subtract' ? 'subtracted' : 'added'} ${parsed} points ${loyaltyMode === 'subtract' ? 'from' : 'to'} ${loyaltyTarget.name}`,
       )
       setLoyaltyDialogOpen(false)
       setLoyaltyTarget(null)
@@ -233,7 +290,8 @@ export default function AdminUsersPage() {
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesRole = roleFilter === 'all' || u.role === roleFilter
-    return matchesSearch && matchesRole
+    const matchesTier = tierFilter === 'all' || u.tier === tierFilter
+    return matchesSearch && matchesRole && matchesTier
   })
 
   // ── Summary stats ────────────────────────────────────────────
@@ -333,45 +391,63 @@ export default function AdminUsersPage() {
 
         {/* Toolbar */}
         <Card className="mb-6 border-border/50">
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {(['all', 'admin', 'user'] as const).map((r) => (
-                  <Button
-                    key={r}
-                    variant={roleFilter === r ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setRoleFilter(r)}
-                    className={roleFilter !== r ? 'bg-transparent' : ''}
-                  >
-                    {r === 'all' ? (
-                      <>
-                        <Filter className="h-3.5 w-3.5 mr-1.5" />
-                        All
-                      </>
-                    ) : r === 'admin' ? (
-                      <>
-                        <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                        Admins ({adminCount})
-                      </>
-                    ) : (
-                      <>
-                        <Users className="h-3.5 w-3.5 mr-1.5" />
-                        Users ({totalUsers - adminCount})
-                      </>
-                    )}
-                  </Button>
-                ))}
-              </div>
+          <CardContent className="p-4 space-y-3">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Role filter */}
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Role:</span>
+              {(['all', 'admin', 'user'] as const).map((r) => (
+                <Button
+                  key={r}
+                  variant={roleFilter === r ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRoleFilter(r)}
+                  className={roleFilter !== r ? 'bg-transparent' : ''}
+                >
+                  {r === 'all' ? (
+                    <><Filter className="h-3.5 w-3.5 mr-1.5" />All</>
+                  ) : r === 'admin' ? (
+                    <><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />Admins ({adminCount})</>
+                  ) : (
+                    <><Users className="h-3.5 w-3.5 mr-1.5" />Users ({totalUsers - adminCount})</>
+                  )}
+                </Button>
+              ))}
+            </div>
+
+            {/* Tier filter */}
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-xs text-muted-foreground font-medium mr-1">Tier:</span>
+              <Button
+                variant={tierFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTierFilter('all')}
+                className={tierFilter !== 'all' ? 'bg-transparent' : ''}
+              >
+                All
+              </Button>
+              {(['Hope', 'Explorer', 'Voyager', 'Elite', 'Royal'] as TierName[]).map((t) => (
+                <Button
+                  key={t}
+                  variant={tierFilter === t ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTierFilter(t)}
+                  className={tierFilter !== t ? 'bg-transparent' : ''}
+                >
+                  <Crown className="h-3.5 w-3.5 mr-1.5" />
+                  {t} ({users.filter((u) => u.tier === t).length})
+                </Button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -388,6 +464,10 @@ export default function AdminUsersPage() {
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">
                     Role
                   </th>
+                  {/* ── NEW TIER COLUMN ── */}
+                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">
+                    Tier
+                  </th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">
                     Loyalty Points
                   </th>
@@ -402,12 +482,12 @@ export default function AdminUsersPage() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-16">
+                    <td colSpan={6} className="text-center py-16">
                       <div className="flex flex-col items-center gap-3 text-muted-foreground">
                         <Users className="h-12 w-12 opacity-30" />
                         <p className="text-lg font-medium">No users found</p>
                         <p className="text-sm">
-                          {searchQuery || roleFilter !== 'all'
+                          {searchQuery || roleFilter !== 'all' || tierFilter !== 'all'
                             ? 'Try adjusting your search or filters.'
                             : 'Users will appear here once they sign up.'}
                         </p>
@@ -427,6 +507,10 @@ export default function AdminUsersPage() {
                       {/* Role */}
                       <td className="py-3.5 px-4 text-center">
                         <RoleBadge role={u.role} />
+                      </td>
+                      {/* Tier — NEW */}
+                      <td className="py-3.5 px-4 text-center">
+                        <TierBadge tier={u.tier} />
                       </td>
                       {/* Loyalty */}
                       <td className="py-3.5 px-4 text-center">
@@ -550,11 +634,7 @@ export default function AdminUsersPage() {
                 {updatingRole ? 'Promoting...' : 'Promote to Admin'}
               </Button>
             ) : (
-              <Button
-                variant="destructive"
-                onClick={confirmRoleChange}
-                disabled={updatingRole}
-              >
+              <Button variant="destructive" onClick={confirmRoleChange} disabled={updatingRole}>
                 {updatingRole ? 'Demoting...' : 'Demote to User'}
               </Button>
             )}
@@ -580,6 +660,10 @@ export default function AdminUsersPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">User</span>
                   <span className="font-medium text-foreground">{loyaltyTarget.name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Tier</span>
+                  <TierBadge tier={loyaltyTarget.tier} />
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Current Points</span>

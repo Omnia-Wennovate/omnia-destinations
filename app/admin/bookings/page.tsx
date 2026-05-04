@@ -17,6 +17,7 @@ import {
   Ban,
   FileText,
   Check,
+  Phone,
 } from 'lucide-react'
 import {
   getBookingsFromFirestore,
@@ -26,6 +27,7 @@ import {
   updatePaymentStatus,
   type FirestoreBooking,
 } from '@/lib/services/bookings.service'
+import { getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -119,6 +121,39 @@ export default function AdminBookingsPage() {
     try {
       setLoading(true)
       const data = await getBookingsFromFirestore()
+
+      // Resolve missing phone numbers from users collection
+      const missingPhoneBookings = data.filter(b => !b.phone && b.userId)
+      if (missingPhoneBookings.length > 0) {
+        const db = await getFirebaseDb()
+        const modules = await getFirebaseModules()
+        if (db && modules.firestore) {
+          const { doc, getDoc } = modules.firestore
+          // Deduplicate userIds to avoid redundant reads
+          const uniqueUserIds = [...new Set(missingPhoneBookings.map(b => b.userId))]
+          const phoneMap: Record<string, string> = {}
+          await Promise.all(
+            uniqueUserIds.map(async (uid) => {
+              try {
+                const userSnap = await getDoc(doc(db, 'users', uid))
+                if (userSnap.exists()) {
+                  const userData = userSnap.data() as any
+                  phoneMap[uid] = userData.phone || userData.phoneNumber || ''
+                }
+              } catch {
+                // Non-fatal — leave phone empty
+              }
+            })
+          )
+          // Patch phone into bookings that were missing it
+          for (const b of data) {
+            if (!b.phone && b.userId && phoneMap[b.userId]) {
+              b.phone = phoneMap[b.userId]
+            }
+          }
+        }
+      }
+
       setBookings(data)
     } catch {
       // handled silently
@@ -229,11 +264,13 @@ export default function AdminBookingsPage() {
 
   // ── Filtering ─────────────────────────────────────────────────
   const filtered = bookings.filter((b) => {
+    const q = searchQuery.toLowerCase()
     const matchesSearch =
       searchQuery === '' ||
-      b.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.tourTitle || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.userEmail.toLowerCase().includes(searchQuery.toLowerCase())
+      b.userName.toLowerCase().includes(q) ||
+      (b.tourTitle || '').toLowerCase().includes(q) ||
+      b.userEmail.toLowerCase().includes(q) ||
+      (b.phone || '').toLowerCase().includes(q)
     const matchesStatus = statusFilter === 'all' || b.bookingStatus === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -345,6 +382,7 @@ export default function AdminBookingsPage() {
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">User</th>
+                  <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">Phone</th>
                   <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">Tour</th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Guests</th>
                   <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Room Type</th>
@@ -357,7 +395,7 @@ export default function AdminBookingsPage() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-16">
+                    <td colSpan={9} className="text-center py-16">
                       <div className="flex flex-col items-center gap-3 text-muted-foreground">
                         <Calendar className="h-12 w-12 opacity-30" />
                         <p className="text-lg font-medium">No bookings found</p>
@@ -378,6 +416,13 @@ export default function AdminBookingsPage() {
                           <p className="font-medium text-foreground">{booking.userName}</p>
                           <p className="text-xs text-muted-foreground">{booking.userEmail}</p>
                         </div>
+                      </td>
+                      {/* Phone */}
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5" />
+                          {booking.phone || 'N/A'}
+                        </span>
                       </td>
                       {/* Tour */}
                       <td className="py-3.5 px-4">

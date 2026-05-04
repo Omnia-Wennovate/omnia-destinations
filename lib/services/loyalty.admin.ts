@@ -13,6 +13,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import {
   calculateBookingCoins,
   getTierMultiplier,
+  evaluateTier,
+  TIERS,
   COINS_EXPIRY_MONTHS,
   REFERRAL_COINS,
   type TierName,
@@ -30,6 +32,9 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
   const db = getAdminDb();
   const bookingRef = db.collection("bookings").doc(bookingId);
 
+  // We need the userId after the transaction for tier evaluation
+  let awardedUserId: string | null = null;
+
   await db.runTransaction(async (tx) => {
     const bookingSnap = await tx.get(bookingRef);
 
@@ -42,7 +47,9 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
 
     // Idempotency guard — atomic inside transaction
     if (booking.coinsStatus === "awarded") {
-      return; // Already processed — no-op
+      // Still capture userId for tier re-evaluation (FIX 4 from loyalty.service.ts)
+      awardedUserId = booking.userId ?? null;
+      return;
     }
 
     if (booking.paymentStatus !== "paid") {
@@ -144,7 +151,16 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
       coinsEarned: coins,
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Capture userId so tier evaluation runs after transaction commits
+    awardedUserId = userId;
   });
+
+  // 5. Evaluate and upgrade tier AFTER transaction completes
+  if (awardedUserId) {
+    console.log("🏅 Evaluating tier for user:", awardedUserId);
+    await evaluateAndUpgradeTierAdmin(awardedUserId);
+  }
 }
 
 // ── Award referral coins (server-side) ────────────────────────────────────────
@@ -262,4 +278,100 @@ export async function awardReferralCoinsAdmin(params: {
 
   await batch.commit();
   console.log(`[awardReferralCoinsAdmin] ${isSignupReferral ? "Referral signup reward granted" : "Referral reward granted"}:`, idempotencyKey);
+}
+
+// ── Tier evaluation (server-side, Admin SDK) ──────────────────────────────────
+
+/**
+ * Evaluate and upgrade a user's tier using all three criteria.
+ * Server-side version using Firebase Admin SDK.
+ *
+ * The client-side evaluateAndUpgradeTier (loyalty.service.ts) uses getFirebaseDb()
+ * which returns null on the server (typeof window === 'undefined'), so this
+ * Admin SDK version is required for API routes.
+ *
+ * Never downgrades automatically — only upgrades.
+ * Writes to users/{uid}/tierHistory when a change occurs.
+ */
+export async function evaluateAndUpgradeTierAdmin(userId: string): Promise<void> {
+  const db = getAdminDb();
+  const userRef = db.collection("users").doc(userId);
+  const userSnap = await userRef.get();
+
+  if (!userSnap.exists) {
+    console.error("[evaluateAndUpgradeTierAdmin] User not found:", userId);
+    return;
+  }
+
+  const data = userSnap.data()!;
+  const totalPackages: number = data.totalPackages ?? 0;
+  const totalSpend: number = data.totalSpend ?? 0;
+  const currentTier: TierName = data.tier ?? "Hope";
+
+  // Prefer pre-aggregated tierCoins (avoids O(n) subcollection scan).
+  // Falls back to summing coinsHistory for accounts created before this field existed.
+  let tierCoins: number;
+  if (typeof data.tierCoins === "number") {
+    tierCoins = data.tierCoins;
+  } else {
+    tierCoins = 0;
+    try {
+      const histSnap = await db
+        .collection("users")
+        .doc(userId)
+        .collection("coinsHistory")
+        .where("affectsTier", "==", true)
+        .get();
+      histSnap.forEach((d) => {
+        const docData = d.data();
+        const amt = docData.amount ?? docData.coins ?? 0;
+        if (amt > 0) tierCoins += amt;
+      });
+    } catch {
+      tierCoins = data.totalCoinsEarned ?? 0;
+    }
+  }
+
+  const currentIdx = TIERS.findIndex((t) => t.name === currentTier);
+  const newTier = evaluateTier({ totalPackages, tierCoins, totalSpend });
+  const newIdx = TIERS.findIndex((t) => t.name === newTier);
+
+  console.log(
+    "[evaluateAndUpgradeTierAdmin]",
+    userId,
+    "packages:", totalPackages,
+    "tierCoins:", tierCoins,
+    "totalSpend:", totalSpend,
+    "currentTier:", currentTier,
+    "→ evaluates to:", newTier
+  );
+
+  if (newIdx <= currentIdx) {
+    console.log("[evaluateAndUpgradeTierAdmin] No upgrade needed — already at", currentTier);
+    return;
+  }
+
+  // Upgrade the tier
+  await userRef.set(
+    {
+      tier: newTier,
+      tierUpdatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // Record tier history
+  await db
+    .collection("users")
+    .doc(userId)
+    .collection("tierHistory")
+    .add({
+      previousTier: currentTier,
+      newTier,
+      reason: `Automatic upgrade: packages=${totalPackages}, tierCoins=${tierCoins}, totalSpend=${totalSpend}`,
+      changedAt: FieldValue.serverTimestamp(),
+    });
+
+  console.log("[evaluateAndUpgradeTierAdmin] ✅ Upgraded:", userId, "from", currentTier, "to", newTier);
 }

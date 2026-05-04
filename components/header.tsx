@@ -91,7 +91,9 @@ export function Header() {
             alt="OMNIA Business and Leisure Travel"
             width={140}
             height={80}
-            className="h-16 w-auto object-contain"
+            className={`h-16 w-auto object-contain transition-all ${
+              shouldBeTransparent ? 'brightness-0 invert' : ''
+            }`}
             priority
           />
         </Link>
