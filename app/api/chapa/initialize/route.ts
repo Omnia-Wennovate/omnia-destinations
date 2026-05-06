@@ -3,10 +3,14 @@
  *
  * Security fixes applied:
  *  1. IGNORES the client-provided `amount` entirely.
- *  2. Fetches booking.totalAmount from Firestore using tx_ref (booking ID) as the ONLY source of truth.
+ *  2. Fetches booking.totalAmount from Firestore using tx_ref (booking ID) to validate the booking.
  *  3. Validates that the booking exists and is not already paid before initialising.
  *  4. Stores tx_ref on the booking document so verify-payment can look it up.
  *  5. CHAPA_SECRET_KEY runtime presence check.
+ *
+ * NOTE: The amount charged via Chapa is FIXED at 10 ETB (trigger payment).
+ *       The real package value (booking.totalAmount) is preserved in Firestore
+ *       and used for loyalty points and all internal business logic.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -55,16 +59,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Booking has been cancelled" }, { status: 409 });
     }
 
-    // ── Use server-trusted amount only ───────────────────────────────────────
+    // ── Validate that the booking has a valid amount (used for loyalty, NOT for Chapa) ─
     const trustedAmount: number = Number(bookingData.totalAmount ?? 0);
     if (trustedAmount <= 0) {
       return NextResponse.json({ message: "Invalid booking amount" }, { status: 400 });
     }
 
+    // ── Fixed Chapa charge: 10 ETB trigger payment ───────────────────────────
+    // The real package value (trustedAmount) stays in Firestore for loyalty/business logic.
+    const CHAPA_TRIGGER_AMOUNT = 10;
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const chapaPayload = {
-      amount: trustedAmount.toString(),   // server-sourced, not client-provided
+      amount: CHAPA_TRIGGER_AMOUNT.toString(),   // fixed 10 ETB trigger payment
       currency: "ETB",
       email,
       first_name,

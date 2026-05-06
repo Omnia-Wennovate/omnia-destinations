@@ -4,10 +4,13 @@
  * Security fixes applied:
  *  1. Uses Firebase Admin SDK (server-side, bypasses client SDK null issue).
  *  2. Verifies tx_ref maps to a real booking in Firestore before acting.
- *  3. Cross-checks Chapa-reported amount against booking.totalAmount — ignores client-provided values.
+ *  3. Cross-checks Chapa-reported amount against the FIXED 10 ETB trigger payment.
  *  4. Only marks booking paid if all checks pass.
  *  5. Triggers coin award ONCE via atomic Firestore transaction (no duplicate).
  *  6. Awards referral coins if the booking user was referred.
+ *
+ * NOTE: Loyalty points and internal logic use booking.totalAmount (the real
+ *       package value), NOT the 10 ETB Chapa charge.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -103,15 +106,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // ── Step 3: Amount integrity check — Chapa must match stored totalAmount ─
-    const storedAmount = Number(booking.totalAmount ?? 0);
-    if (storedAmount <= 0 || Math.abs(chapaAmount - storedAmount) > 1) {
+    // ── Step 3: Amount integrity check — Chapa must match the fixed 10 ETB trigger ─
+    // The real package value (booking.totalAmount) is NOT compared here;
+    // it is preserved in Firestore for loyalty points and business logic.
+    const CHAPA_TRIGGER_AMOUNT = 10;
+    if (Math.abs(chapaAmount - CHAPA_TRIGGER_AMOUNT) > 1) {
       // Allow ±1 ETB tolerance for floating-point rounding only
       console.error(
         "[verify-payment] Amount mismatch — chapa:",
         chapaAmount,
-        "stored:",
-        storedAmount,
+        "expected trigger:",
+        CHAPA_TRIGGER_AMOUNT,
         "booking:",
         booking.id
       );
