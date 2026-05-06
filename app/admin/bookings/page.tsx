@@ -381,15 +381,15 @@ export default function AdminBookingsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">User</th>
-                  <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">Phone</th>
-                  <th className="text-left py-3.5 px-4 font-semibold text-muted-foreground">Tour</th>
-                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Guests</th>
-                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Room Type</th>
-                  <th className="text-right py-3.5 px-4 font-semibold text-muted-foreground">Amount</th>
-                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Payment</th>
-                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Status</th>
-                  <th className="text-center py-3.5 px-4 font-semibold text-muted-foreground">Actions</th>
+                  <th className="text-left py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">User</th>
+                  <th className="text-left py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Phone</th>
+                  <th className="text-left py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Tour</th>
+                  <th className="text-center py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Guests</th>
+                  <th className="text-center py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Room</th>
+                  <th className="text-right py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Amount</th>
+                  <th className="text-center py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Payment</th>
+                  <th className="text-center py-3.5 px-2 font-semibold text-muted-foreground whitespace-nowrap">Status</th>
+                  <th className="text-center py-3.5 px-2 font-semibold text-muted-foreground sticky right-0 bg-muted/40 backdrop-blur-sm border-l shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -409,52 +409,52 @@ export default function AdminBookingsPage() {
                   </tr>
                 ) : (
                   filtered.map((booking) => (
-                    <tr key={booking.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                    <tr key={booking.id} className="group border-b last:border-0 hover:bg-muted/30 transition-colors">
                       {/* User */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-2">
                         <div>
-                          <p className="font-medium text-foreground">{booking.userName}</p>
-                          <p className="text-xs text-muted-foreground">{booking.userEmail}</p>
+                          <p className="font-medium text-foreground whitespace-nowrap">{booking.userName}</p>
+                          <p className="text-xs text-muted-foreground whitespace-nowrap">{booking.userEmail}</p>
                         </div>
                       </td>
                       {/* Phone */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                      <td className="py-3.5 px-2">
+                        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground whitespace-nowrap">
                           <Phone className="h-3.5 w-3.5" />
                           {booking.phone || 'N/A'}
                         </span>
                       </td>
                       {/* Tour */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-medium text-foreground max-w-[200px] truncate">{booking.tourTitle}</p>
+                      <td className="py-3.5 px-2">
+                        <p className="font-medium text-foreground max-w-[120px] truncate">{booking.tourTitle}</p>
                       </td>
                       {/* Guests */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <td className="py-3.5 px-2 text-center">
+                        <span className="inline-flex items-center gap-1 text-muted-foreground whitespace-nowrap">
                           <Users className="h-3.5 w-3.5" />
                           {booking.guests}
                         </span>
                       </td>
                       {/* Room Type */}
-                      <td className="py-3.5 px-4 text-center text-sm">
-                        <span className="capitalize font-medium text-foreground">
+                      <td className="py-3.5 px-2 text-center text-sm">
+                        <span className="capitalize font-medium text-foreground whitespace-nowrap">
                           {booking.roomType || 'Single'}
                         </span>
                       </td>
                       {/* Amount */}
-                      <td className="py-3.5 px-4 text-right font-semibold text-foreground">
+                      <td className="py-3.5 px-2 text-right font-semibold text-foreground whitespace-nowrap">
                         ${booking.amount?.toLocaleString() || booking.totalAmount?.toLocaleString()}
                       </td>
                       {/* Payment */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-2 text-center">
                         <PaymentStatusBadge status={booking.paymentStatus} />
                       </td>
                       {/* Status */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-2 text-center">
                         <BookingStatusBadge status={booking.bookingStatus} />
                       </td>
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-2 text-center sticky right-0 bg-background group-hover:bg-muted/30 border-l shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)] transition-colors">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { BookingDialog } from '@/components/booking-dialog'
 
@@ -13,15 +14,21 @@ interface BookNowButtonProps {
     sharingPrice: number
     duration: string
   }
+  redirectUrl?: string
 }
 
-export function BookNowButton({ packageData }: BookNowButtonProps) {
+export function BookNowButton({ packageData, redirectUrl }: BookNowButtonProps) {
   const [bookingOpen, setBookingOpen] = useState(false)
+  const router = useRouter()
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setBookingOpen(true)
+    if (redirectUrl) {
+      router.push(redirectUrl)
+    } else {
+      setBookingOpen(true)
+    }
   }
 
   const stopPropagation = (e: React.MouseEvent) => {

@@ -17,9 +17,10 @@ interface PackageCardProps {
     availableFrom?: string
     availableUntil?: string
   }
+  redirectBookNow?: string
 }
 
-export function PackageCard({ package: pkg }: PackageCardProps) {
+export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps) {
   if (!pkg) return null
 
   const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil } = pkg
@@ -113,6 +114,7 @@ export function PackageCard({ package: pkg }: PackageCardProps) {
 
           <BookNowButton
             packageData={{ id, title, location, singlePrice, sharingPrice, duration }}
+            redirectUrl={redirectBookNow}
           />
         </div>
       </div>

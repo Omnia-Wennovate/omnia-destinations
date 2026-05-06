@@ -62,7 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main
         className={cn(
           'pt-16 min-h-screen transition-all duration-300',
-          sidebarCollapsed ? 'ml-[68px]' : 'ml-[240px]'
+          sidebarCollapsed ? 'ml-[68px]' : 'ml-[200px]'
         )}
       >
         {children}
