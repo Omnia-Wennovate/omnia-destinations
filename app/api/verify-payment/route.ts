@@ -8,6 +8,7 @@
  *  4. Only marks booking paid if all checks pass.
  *  5. Triggers coin award ONCE via atomic Firestore transaction (no duplicate).
  *  6. Awards referral coins if the booking user was referred.
+ *  7. Captures and stores Chapa receipt data on the booking document.
  *
  * NOTE: Loyalty points and internal logic use booking.totalAmount (the real
  *       package value), NOT the 10 ETB Chapa charge.
@@ -30,7 +31,16 @@ interface BookingDoc {
   referredBy?: string;
   packageTitle?: string;
   omniaServiceValue?: number;
+  paymentReceipts?: PaymentReceipt[];
   [key: string]: unknown; // Allow additional Firestore fields
+}
+
+interface PaymentReceipt {
+  tx_ref: string;
+  chapa_ref: string;
+  amount: number;
+  paidAt: FirebaseFirestore.FieldValue | string;
+  status: "success";
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -48,6 +58,20 @@ async function getBookingByTxRef(tx_ref: string): Promise<BookingDoc | null> {
   const docSnap = snap.docs[0];
   const data = docSnap.data() as Omit<BookingDoc, "id">;
   return { id: docSnap.id, ...data } as BookingDoc;
+}
+
+/**
+ * Build a receipt object from the Chapa verification response.
+ * Uses server timestamp for paidAt so the time is authoritative.
+ */
+function buildReceipt(chapaData: Record<string, any>, tx_ref: string): PaymentReceipt {
+  return {
+    tx_ref,
+    chapa_ref: chapaData?.data?.reference ?? chapaData?.data?.tx_ref ?? tx_ref,
+    amount: Number(chapaData?.data?.amount ?? 0),
+    paidAt: new Date().toISOString(),
+    status: "success",
+  };
 }
 
 // ── main handler ─────────────────────────────────────────────────────────────
@@ -125,25 +149,85 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // ── Step 4 + 5: Atomic idempotency check + status update ────────────────
+    // ── Build receipt from Chapa response ────────────────────────────────────
+    const receipt = buildReceipt(chapaData, tx_ref);
+
+    // ── Step 4 + 5: Atomic idempotency check + status update + receipt ───────
     // Using a transaction prevents two concurrent Chapa callbacks from both
     // marking the same booking as paid (TOCTOU race condition).
     const db = getAdminDb();
     const bookingRef = db.collection("bookings").doc(booking.id);
 
+    // Build the Chapa receipt URL
+    const chapaReference = chapaData?.data?.reference ?? chapaData?.data?.tx_ref ?? tx_ref;
+    
+    // Use Chapa's receipt_url if provided (live mode), otherwise use local receipt page
+    const chapaReceiptUrl = chapaData?.data?.receipt_url || null;
+    // Local receipt page — always works (test + live mode)
+    const receiptUrl = chapaReceiptUrl || `/api/receipt/${booking.id}`;
+    
+    console.log("📝 Saving Chapa receipt URL:", receiptUrl, "reference:", chapaReference);
+    if (chapaReceiptUrl) {
+      console.log("🔗 Receipt URL stored successfully (Chapa hosted):", chapaReceiptUrl);
+    } else {
+      console.log("🔗 Receipt URL stored successfully (local):", receiptUrl);
+    }
+
     let alreadyProcessed = false;
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(bookingRef);
       if (!snap.exists) throw new Error("Booking disappeared during transaction");
-      if (snap.data()?.bookingStatus === "pending_approval") {
+
+      const bookingData = snap.data() ?? {};
+
+      // ── Idempotency: if paymentCompleted is already true, skip ──
+      if (bookingData.paymentCompleted === true) {
         alreadyProcessed = true;
+
+        // Check if this exact receipt tx_ref is already stored
+        const existingReceipts: PaymentReceipt[] = bookingData.paymentReceipts ?? [];
+        const isDuplicate = existingReceipts.some((r: PaymentReceipt) => r.tx_ref === tx_ref);
+        if (isDuplicate) {
+          console.log("⚠️ Duplicate receipt skipped — tx_ref:", tx_ref, "booking:", booking.id);
+        }
         return; // Idempotent — already processed
       }
+
+      // ── Idempotency: check if this receipt tx_ref is already stored ────
+      const existingReceipts: PaymentReceipt[] = bookingData.paymentReceipts ?? [];
+      const isDuplicate = existingReceipts.some((r: PaymentReceipt) => r.tx_ref === tx_ref);
+
+      if (isDuplicate) {
+        console.log("⚠️ Duplicate receipt skipped — tx_ref:", tx_ref, "booking:", booking.id);
+        // Still update status if needed, but don't add the receipt again
+        tx.update(bookingRef, {
+          paymentStatus: "pending",
+          bookingStatus: "pending",       // keep pending — admin approves later
+          paymentCompleted: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      // ── Store receipt: latest + append to history array + extended fields ──
       tx.update(bookingRef, {
-        paymentStatus: "pending",
-        bookingStatus: "pending_approval",
+        paymentStatus: "pending",           // payment submitted, awaiting admin verification
+        bookingStatus: "pending",           // keep pending — admin approves later
+        paymentReceipt: receipt,            // latest receipt (quick access)
+        paymentReceipts: FieldValue.arrayUnion(receipt), // full history (never overwrites)
+        // Extended receipt tracking fields
+        receiptUrl,
+        chapaReference,
+        paidAmount: chapaAmount,
+        paymentMethod: "chapa",
+        paidAt: new Date().toISOString(),
+        paymentCompleted: true,             // receipt exists — enables receipt display
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      console.log("✅ Payment verified — receipt stored for tx_ref:", tx_ref, "booking:", booking.id);
+      console.log("📄 Receipt added to booking:", JSON.stringify(receipt));
+      console.log("🔗 Receipt URL stored successfully:", receiptUrl);
     });
 
     if (alreadyProcessed) {

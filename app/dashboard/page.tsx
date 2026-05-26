@@ -131,6 +131,7 @@ interface Booking {
   amount: number
   status: string
   paymentStatus: string
+  receiptSubmitted: boolean
 }
 
 interface Reward {
@@ -299,7 +300,8 @@ useEffect(() => {
             guests: b.guests || 1,
             amount: b.totalAmount || b.amount || 0,
             status: b.bookingStatus || 'pending',
-            paymentStatus: b.paymentStatus || 'unpaid',
+            paymentStatus: b.paymentStatus || 'pending',
+            receiptSubmitted: b.paymentCompleted === true || !!b.receiptUrl || !!b.paymentReceipt,
           }))
           setBookings(bookingsList)
         } catch (error) {
@@ -505,6 +507,8 @@ useEffect(() => {
         return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
       case 'pending':
         return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+      case 'unpaid':
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400'
       case 'refunded':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
       case 'failed':
@@ -1014,6 +1018,35 @@ useEffect(() => {
                               <Badge variant="secondary" className={`text-xs font-medium ${getPaymentColor(booking.paymentStatus)}`}>
                                 {booking.paymentStatus}
                               </Badge>
+                              {booking.receiptSubmitted && (
+                                <>
+                                  <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">Receipt Submitted</p>
+                                  <div className="flex items-center justify-center gap-1.5 mt-1">
+                                    <button
+                                      onClick={() => {
+                                        console.log('🧾 User receipt detected')
+                                        console.log('🧾 Opening receipt from user dashboard:', `/api/receipt/${booking.id}`)
+                                        window.open(`/api/receipt/${booking.id}`, '_blank')
+                                      }}
+                                      className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 rounded-md px-3 py-1 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer bg-transparent transition-colors"
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
+                                      View
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        console.log('🧾 User receipt detected')
+                                        console.log('🧾 Downloading receipt from user dashboard:', `/api/receipt/${booking.id}`)
+                                        window.open(`/api/receipt/${booking.id}`, '_blank')
+                                      }}
+                                      className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 border border-green-300 dark:border-green-700 rounded-md px-3 py-1 hover:bg-green-50 dark:hover:bg-green-950/40 cursor-pointer bg-transparent transition-colors"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Download
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <Badge variant="secondary" className={`text-xs font-medium ${getStatusColor(booking.status)}`}>

@@ -3,6 +3,14 @@ import { awardBookingCoins, reverseBookingCoins, awardReferralCoins } from "@/li
 import { getPackageById } from "@/lib/services/packages.service";
 import { logger } from "@/lib/logger";
 
+export interface PaymentReceipt {
+  tx_ref: string;
+  chapa_ref: string;
+  amount: number;
+  paidAt: any; // ISO string or Firestore timestamp
+  status: "success";
+}
+
 export interface FirestoreBooking {
   id: string;
   userId: string;
@@ -25,10 +33,20 @@ export interface FirestoreBooking {
   omniaServiceValue: number;  // ETB value of Omnia-managed services only
   coinsEarned: number;        // coins awarded on completion
   coinsStatus: "pending" | "awarded" | "reversed";
-  paymentStatus: "paid" | "pending" | "refunded" | "failed";
+  paymentStatus: "paid" | "pending" | "unpaid" | "refunded" | "failed";
   bookingStatus: "confirmed" | "pending" | "cancelled" | "completed";
   refundNote?: string;
   specialRequests?: string;
+  // Payment receipt fields
+  paymentReceipt?: PaymentReceipt;    // latest receipt (quick access)
+  paymentReceipts?: PaymentReceipt[]; // full history of all receipts
+  // Extended receipt tracking fields (set after successful Chapa payment)
+  receiptUrl?: string;
+  chapaReference?: string;
+  paidAmount?: number;
+  paymentMethod?: string;
+  paidAt?: any;
+  paymentCompleted?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -212,6 +230,14 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
         paymentStatus: data.paymentStatus || "pending",
         bookingStatus: data.bookingStatus || data.status || "pending",
         specialRequests: data.specialRequests || "",
+        paymentReceipt: data.paymentReceipt || undefined,
+        paymentReceipts: data.paymentReceipts || [],
+        receiptUrl: data.receiptUrl || undefined,
+        chapaReference: data.chapaReference || undefined,
+        paidAmount: data.paidAmount || undefined,
+        paymentMethod: data.paymentMethod || undefined,
+        paidAt: data.paidAt || undefined,
+        paymentCompleted: data.paymentCompleted || false,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       });
@@ -270,6 +296,14 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
         bookingStatus: data.bookingStatus || data.status || "pending",
         refundNote: data.refundNote || "",
         specialRequests: data.specialRequests || "",
+        paymentReceipt: data.paymentReceipt || undefined,
+        paymentReceipts: data.paymentReceipts || [],
+        receiptUrl: data.receiptUrl || undefined,
+        chapaReference: data.chapaReference || undefined,
+        paidAmount: data.paidAmount || undefined,
+        paymentMethod: data.paymentMethod || undefined,
+        paidAt: data.paidAt || undefined,
+        paymentCompleted: data.paymentCompleted || false,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       });
@@ -417,7 +451,7 @@ export async function updateBookingStatusByTxRef(
 
 export async function updatePaymentStatusByTxRef(
   tx_ref: string,
-  paymentStatus: "paid" | "pending" | "refunded" | "failed"
+  paymentStatus: "paid" | "pending" | "unpaid" | "refunded" | "failed"
 ): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
@@ -437,7 +471,7 @@ export async function updatePaymentStatusByTxRef(
 // Update payment status (admin)
 export async function updatePaymentStatus(
   bookingId: string,
-  paymentStatus: "paid" | "pending" | "refunded" | "failed"
+  paymentStatus: "paid" | "pending" | "unpaid" | "refunded" | "failed"
 ): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();

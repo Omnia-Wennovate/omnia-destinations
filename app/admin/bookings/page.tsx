@@ -18,6 +18,8 @@ import {
   FileText,
   Check,
   Phone,
+  Download,
+  ExternalLink,
 } from 'lucide-react'
 import {
   getBookingsFromFirestore,
@@ -65,6 +67,7 @@ function PaymentStatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; classes: string }> = {
     paid:     { label: 'Paid',     classes: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
     pending:  { label: 'Pending',  classes: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+    unpaid:   { label: 'Unpaid',   classes: 'bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-300' },
     refunded: { label: 'Refunded', classes: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
     failed:   { label: 'Failed',   classes: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
   }
@@ -251,7 +254,7 @@ export default function AdminBookingsPage() {
     }
   }
 
-  async function handleUpdatePaymentStatus(bookingId: string, newStatus: "paid" | "pending" | "failed") {
+  async function handleUpdatePaymentStatus(bookingId: string, newStatus: "paid" | "pending" | "unpaid" | "failed") {
     try {
       await updatePaymentStatus(bookingId, newStatus)
       setBookings((prev) =>
@@ -522,6 +525,36 @@ export default function AdminBookingsPage() {
                                 <XCircle className="h-4 w-4" />
                                 Mark as Failed
                               </DropdownMenuItem>
+                            )}
+
+                            {/* Receipt Actions — only show when receipt exists */}
+                            {(booking.paymentCompleted || booking.receiptUrl || booking.paymentReceipt) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Payment Receipt</div>
+                                <DropdownMenuItem
+                                  className="gap-2 cursor-pointer"
+                                  onClick={() => {
+                                    const url = `/api/receipt/${booking.id}`
+                                    console.log('🧾 Opening Chapa receipt:', url)
+                                    window.open(url, '_blank')
+                                  }}
+                                >
+                                  <ExternalLink className="h-4 w-4 text-blue-600" />
+                                  View Receipt
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="gap-2 cursor-pointer"
+                                  onClick={() => {
+                                    const url = `/api/receipt/${booking.id}`
+                                    console.log('🧾 Opening Chapa receipt for download:', url)
+                                    window.open(url, '_blank')
+                                  }}
+                                >
+                                  <Download className="h-4 w-4 text-green-600" />
+                                  Download Receipt
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>

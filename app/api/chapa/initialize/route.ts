@@ -51,12 +51,15 @@ export async function POST(req: NextRequest) {
 
     const bookingData = bookingSnap.data() as Record<string, any>;
 
-    // Guard: don't re-initialise a paid or cancelled booking
+    // Guard: don't re-initialise a paid, completed, or cancelled booking
     if (bookingData.paymentStatus === "paid") {
       return NextResponse.json({ message: "Booking already paid" }, { status: 409 });
     }
     if (bookingData.bookingStatus === "cancelled") {
       return NextResponse.json({ message: "Booking has been cancelled" }, { status: 409 });
+    }
+    if (bookingData.paymentCompleted === true) {
+      return NextResponse.json({ message: "Payment receipt already submitted" }, { status: 409 });
     }
 
     // ── Validate that the booking has a valid amount (used for loyalty, NOT for Chapa) ─
