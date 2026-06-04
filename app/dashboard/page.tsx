@@ -50,9 +50,11 @@ interface UserProfile {
   loyaltyPoints: number
   tier: string
   totalCoinsEarned: number
-  totalPackages: number
+  /** Total completed trips ever */
+  totalCompletedTrips: number
+  /** Completed trips within the current 12-month membership year — drives tier qualification */
+  completedTripsThisYear: number
   totalSpend: number
-  annualOmniaValue: number
   referralCode: string
   totalReferrals: number
   phone: string
@@ -60,66 +62,194 @@ interface UserProfile {
   createdAt: any
 }
 
-// ── Tier configuration (matches loyalty.service.ts TIERS exactly) ─────────────
+// ── Tier configuration aligned with the Omnia Loyalty Program document ────────
+//
+// Tiers (in order):
+//   Hope      → Bronze        (0 trips,  1.0×, open enrolment)
+//   HopePlus  → Hope+/Preferred (1 trip, 1.1×, auto after first paid trip)
+//   Explorer  → Silver        (2 trips,  1.2×, open enrolment)
+//   Royal     → Gold          (3 trips,  1.5×, invite/approval)
+//   Timeless  → Platinum      (4 trips,  2.0×, invite/approval)
+//   Diamond   → Diamond       (5+ trips, 3.0×, invite/approval)
+//
+// Tier qualification is based SOLELY on completed trips in a 12-month
+// membership year.  Referred trips that complete count toward the referrer's
+// personal trip total.
+//
+// Gold / Platinum / Diamond require Omnia team confirmation (up to 5 business
+// days).  Until confirmed the previous tier benefits remain active — we show
+// a "pending review" note in the UI.
+
 const TIER_CONFIG = [
   {
-    name: 'Hope',     icon: '🥉', minPackages: 0,  minCoins: 0,      minSpend: 0,         multiplier: '1x',   benefit: '1× coin multiplier on every booking',
-    badgeBg: 'bg-orange-100 dark:bg-orange-950/60', badgeText: 'text-orange-700 dark:text-orange-300', badgeBorder: 'border-orange-300 dark:border-orange-700', bar: 'bg-orange-400',
+    name: 'Hope',
+    label: 'Hope (Bronze)',
+    icon: '🥉',
+    minTrips: 0,
+    multiplier: '1×',
+    requiresApproval: false,
+    benefit: '1× coin multiplier · standard-plus priority · early package access',
+    benefits: [
+      '1× coin multiplier on every booking',
+      'Standard-plus priority handling',
+      'Early access to packages',
+      '100 welcome coins on first booking',
+    ],
+    badgeBg:     'bg-orange-100 dark:bg-orange-950/60',
+    badgeText:   'text-orange-700 dark:text-orange-300',
+    badgeBorder: 'border-orange-300 dark:border-orange-700',
+    bar:         'bg-orange-400',
   },
   {
-    name: 'Explorer', icon: '🧭', minPackages: 2,  minCoins: 7_000,   minSpend: 700_000,   multiplier: '1.2x', benefit: '1.2× coins — earn 20% more per trip',
-    badgeBg: 'bg-gray-100 dark:bg-gray-800/60',   badgeText: 'text-gray-700 dark:text-gray-300',     badgeBorder: 'border-gray-300 dark:border-gray-600',   bar: 'bg-gray-500',
+    name: 'HopePlus',
+    label: 'Hope+ (Preferred)',
+    icon: '⭐',
+    minTrips: 1,
+    multiplier: '1.1×',
+    requiresApproval: false,
+    benefit: '1.1× coin multiplier · recognised returning client',
+    benefits: [
+      '1.1× coin multiplier',
+      'Priority handling — recognised returning client',
+      '1 more trip qualifies you for Silver',
+    ],
+    badgeBg:     'bg-orange-100 dark:bg-orange-950/60',
+    badgeText:   'text-orange-600 dark:text-orange-200',
+    badgeBorder: 'border-orange-400 dark:border-orange-600',
+    bar:         'bg-orange-500',
   },
   {
-    name: 'Voyager',  icon: '✈️',  minPackages: 4,  minCoins: 15_400,  minSpend: 1_400_000, multiplier: '1.5x', benefit: '1.5× coins — half again more rewards',
-    badgeBg: 'bg-amber-100 dark:bg-amber-950/60', badgeText: 'text-amber-700 dark:text-amber-300',   badgeBorder: 'border-amber-300 dark:border-amber-700', bar: 'bg-amber-500',
+    name: 'Explorer',
+    label: 'Explorer (Silver)',
+    icon: '🧭',
+    minTrips: 2,
+    multiplier: '1.2×',
+    requiresApproval: false,
+    benefit: '1.2× coins · 1% discount · ET Lounge 1×/year · 1 eSIM',
+    benefits: [
+      '1.2× coin multiplier',
+      '1% discount on all displayed prices',
+      'Ethiopian Airlines Lounge access 1× per year',
+      '1 international eSIM per year',
+      'Corporate hotel deals up to 30%',
+    ],
+    badgeBg:     'bg-gray-100 dark:bg-gray-800/60',
+    badgeText:   'text-gray-700 dark:text-gray-300',
+    badgeBorder: 'border-gray-300 dark:border-gray-600',
+    bar:         'bg-gray-500',
   },
   {
-    name: 'Elite',    icon: '💎', minPackages: 8,  minCoins: 36_400,  minSpend: 2_800_000, multiplier: '2x',   benefit: '2× coins + priority support',
-    badgeBg: 'bg-purple-100 dark:bg-purple-950/60', badgeText: 'text-purple-700 dark:text-purple-300', badgeBorder: 'border-purple-300 dark:border-purple-700', bar: 'bg-gradient-to-r from-purple-500 to-pink-500',
+    name: 'Royal',
+    label: 'Royal (Gold)',
+    icon: '🥇',
+    minTrips: 3,
+    multiplier: '1.5×',
+    requiresApproval: true,
+    benefit: '1.5× coins · 2% discount · ET Lounge 2×/year · 2 eSIMs · domestic flight',
+    benefits: [
+      '1.5× coin multiplier',
+      '2% discount on all displayed prices',
+      'ET Lounge access 2× per year',
+      '2 eSIMs per year',
+      'Dedicated account support',
+      '1 complimentary domestic flight per year',
+      '1 free spa voucher',
+      '50% one-way business class upgrade',
+    ],
+    badgeBg:     'bg-amber-100 dark:bg-amber-950/60',
+    badgeText:   'text-amber-700 dark:text-amber-300',
+    badgeBorder: 'border-amber-300 dark:border-amber-700',
+    bar:         'bg-amber-500',
   },
   {
-    name: 'Royal',    icon: '👑', minPackages: 16, minCoins: 92_400,  minSpend: 5_600_000, multiplier: '3x',   benefit: '3× coins — maximum tier rewards',
-    badgeBg: 'bg-yellow-100 dark:bg-yellow-950/60', badgeText: 'text-yellow-700 dark:text-yellow-300', badgeBorder: 'border-yellow-300 dark:border-yellow-700', bar: 'bg-gradient-to-r from-yellow-400 to-amber-500',
+    name: 'Timeless',
+    label: 'Timeless (Platinum)',
+    icon: '💎',
+    minTrips: 4,
+    multiplier: '2×',
+    requiresApproval: true,
+    benefit: '2× coins · 3% discount · ET Lounge 3×/year · domestic flight · 2 spa vouchers',
+    benefits: [
+      '2× coin multiplier',
+      '3% discount on all displayed prices',
+      'ET Lounge access 3× per year',
+      'Multiple eSIMs (fair-use)',
+      'Absolute priority handling',
+      '1 complimentary domestic flight per year',
+      '2 free spa vouchers',
+      'Free one-way business upgrade or 50% package discount',
+    ],
+    badgeBg:     'bg-purple-100 dark:bg-purple-950/60',
+    badgeText:   'text-purple-700 dark:text-purple-300',
+    badgeBorder: 'border-purple-300 dark:border-purple-700',
+    bar:         'bg-gradient-to-r from-purple-500 to-pink-500',
+  },
+  {
+    name: 'Diamond',
+    label: 'Diamond',
+    icon: '👑',
+    minTrips: 5,
+    multiplier: '3×',
+    requiresApproval: true,
+    benefit: '3× coins · 5% discount · ET Lounge 4×/year · domestic flight · 3 spa vouchers',
+    benefits: [
+      '3× coin multiplier',
+      '5% discount on all displayed prices',
+      'ET Lounge access 4× per year',
+      'Multiple eSIMs (fair-use)',
+      'Absolute priority in every interaction',
+      '1 complimentary domestic flight per year',
+      '3 free spa vouchers',
+      'Full return business class upgrade or 100% package discount',
+    ],
+    badgeBg:     'bg-yellow-100 dark:bg-yellow-950/60',
+    badgeText:   'text-yellow-700 dark:text-yellow-300',
+    badgeBorder: 'border-yellow-300 dark:border-yellow-700',
+    bar:         'bg-gradient-to-r from-yellow-400 to-amber-500',
   },
 ] as const
+
+type TierConfigName = typeof TIER_CONFIG[number]['name']
 
 function getTierConfig(tier: string) {
   return TIER_CONFIG.find(t => t.name === tier) ?? TIER_CONFIG[0]
 }
 
-//
 function getMonthsLeft(expiryDate: string) {
   const expiry = new Date(expiryDate)
   const now = new Date()
-
-  const yearsDiff = expiry.getFullYear() - now.getFullYear()
-  const monthsDiff = expiry.getMonth() - now.getMonth()
-
-  return yearsDiff * 12 + monthsDiff
+  return (expiry.getFullYear() - now.getFullYear()) * 12 + (expiry.getMonth() - now.getMonth())
 }
-//
 
-function getTierProgress(tier: string, totalCoinsEarned: number, totalPackages: number, totalSpend: number) {
+/**
+ * Calculate tier progress based on completedTripsThisYear only.
+ * Returns null when the user is already at Diamond (max tier).
+ */
+function getTierProgress(tier: string, completedTripsThisYear: number) {
   const currentIdx = TIER_CONFIG.findIndex(t => t.name === tier)
-  if (currentIdx === TIER_CONFIG.length - 1) return null // already Royal
+  // Already at max tier
+  if (currentIdx === TIER_CONFIG.length - 1) return null
+
   const next = TIER_CONFIG[currentIdx + 1]
-  // Use whichever metric gives the best (highest) progress
-  const coinsPct   = next.minCoins    > 0 ? Math.min(100, Math.round((totalCoinsEarned / next.minCoins)    * 100)) : 100
-  const pkgPct     = next.minPackages > 0 ? Math.min(100, Math.round((totalPackages    / next.minPackages) * 100)) : 100
-  const spendPct   = next.minSpend    > 0 ? Math.min(100, Math.round((totalSpend       / next.minSpend)    * 100)) : 100
-  const percent    = Math.max(coinsPct, pkgPct, spendPct)
-  const coinsLeft  = Math.max(0, next.minCoins    - totalCoinsEarned)
-  const pkgsLeft   = Math.max(0, next.minPackages - totalPackages)
-  const spendLeft  = Math.max(0, next.minSpend    - totalSpend)
-  const parts: string[] = []
-  if (pkgsLeft   > 0) parts.push(`${pkgsLeft} more package${pkgsLeft !== 1 ? 's' : ''}`)
-  if (coinsLeft  > 0) parts.push(`earn ${coinsLeft.toLocaleString()} more coins`)
-  if (spendLeft  > 0) parts.push(`spend ${spendLeft.toLocaleString()} ETB more`)
-  const hint = parts.length > 0
-    ? `${parts.join(' or ')} to reach ${next.name}`
-    : `You qualify for ${next.name}!`
-  return { nextTier: next.name, nextIcon: next.icon, percent, hint, bar: next.bar }
+  const tripsNeeded = next.minTrips
+  const percent = tripsNeeded > 0
+    ? Math.min(100, Math.round((completedTripsThisYear / tripsNeeded) * 100))
+    : 100
+  const tripsLeft = Math.max(0, tripsNeeded - completedTripsThisYear)
+
+  const hint = tripsLeft > 0
+    ? `${tripsLeft} more completed trip${tripsLeft !== 1 ? 's' : ''} to reach ${next.label}`
+    : `You qualify for ${next.label}!${next.requiresApproval ? ' (pending Omnia review)' : ''}`
+
+  return {
+    nextTier: next.name,
+    nextLabel: next.label,
+    nextIcon: next.icon,
+    percent,
+    hint,
+    bar: next.bar,
+    requiresApproval: next.requiresApproval,
+  }
 }
 
 interface Booking {
@@ -174,56 +304,42 @@ export default function DashboardPage() {
     }
   }, [isInitialized, isAuthenticated, user, router])
 
-
-  //
-useEffect(() => {
-  if (!passport || !user?.id) return
-
-  const monthsLeft = getMonthsLeft(passport.expiryDate)
-
-  const key = `passport_notified_${user.id}`
-  const alreadyNotified = localStorage.getItem(key)
-
-  if (Notification.permission !== 'granted') {
-    Notification.requestPermission()
-  }
-
-  if (monthsLeft <= 8 && monthsLeft > 0 && !alreadyNotified) {
-    if (Notification.permission === 'granted') {
-      new Notification('⚠️ Passport Expiry Warning', {
-        body: `Your passport expires in ${monthsLeft} month(s). Please renew it.`,
-      })
+  // Passport expiry notification (≤ 8 months left)
+  useEffect(() => {
+    if (!passport || !user?.id) return
+    const monthsLeft = getMonthsLeft(passport.expiryDate)
+    const key = `passport_notified_${user.id}`
+    const alreadyNotified = localStorage.getItem(key)
+    if (Notification.permission !== 'granted') Notification.requestPermission()
+    if (monthsLeft <= 8 && monthsLeft > 0 && !alreadyNotified) {
+      if (Notification.permission === 'granted') {
+        new Notification('⚠️ Passport Expiry Warning', {
+          body: `Your passport expires in ${monthsLeft} month(s). Please renew it.`,
+        })
+      }
+      localStorage.setItem(key, 'true')
     }
+    if (monthsLeft > 8) localStorage.removeItem(key)
+  }, [passport, user])
 
-    localStorage.setItem(key, 'true')
-  }
-
-  if (monthsLeft > 8) {
-    localStorage.removeItem(key)
-  }
-}, [passport, user])
-  //
-
-  // Real-time listener: users/{uid} → profile (tier, loyaltyPoints, etc.)
+  // Real-time listener: users/{uid} → profile
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
-
     let unsubscribeProfile: (() => void) | null = null
 
     async function subscribeToProfile() {
       const db = await getFirebaseDb()
       const modules = await getFirebaseModules()
       if (!db || !modules.firestore) {
-        // Fallback when Firebase not available
         setProfile({
           name: `${user!.firstName} ${user!.lastName}`.trim(),
           email: user!.email,
           loyaltyPoints: 0,
           tier: 'Hope',
           totalCoinsEarned: 0,
-          totalPackages: 0,
+          totalCompletedTrips: 0,
+          completedTripsThisYear: 0,
           totalSpend: 0,
-          annualOmniaValue: 0,
           referralCode: '------',
           totalReferrals: 0,
           phone: '',
@@ -239,16 +355,17 @@ useEffect(() => {
       unsubscribeProfile = onSnapshot(userDocRef, (snap: any) => {
         if (snap.exists()) {
           const data = snap.data()
-          console.log('[Dashboard] user.tier:', data.tier)
+          console.log('[Dashboard] user.tier:', data.tier, 'tripsThisYear:', data.completedTripsThisYear)
           setProfile({
             name: data.name || `${user!.firstName} ${user!.lastName}`,
             email: data.email || user!.email,
             loyaltyPoints: data.loyaltyPoints ?? 0,
             tier: data.tier ?? 'Hope',
             totalCoinsEarned: data.totalCoinsEarned ?? 0,
-            totalPackages: data.totalPackages ?? 0,
+            totalCompletedTrips: data.totalCompletedTrips ?? 0,
+            // completedTripsThisYear drives tier progress UI
+            completedTripsThisYear: data.completedTripsThisYear ?? 0,
             totalSpend: data.totalSpend ?? 0,
-            annualOmniaValue: data.annualOmniaValue ?? 0,
             referralCode: data.referralCode || '------',
             totalReferrals: data.totalReferrals ?? 0,
             phone: data.phone || '',
@@ -262,9 +379,9 @@ useEffect(() => {
             loyaltyPoints: 0,
             tier: 'Hope',
             totalCoinsEarned: 0,
-            totalPackages: 0,
+            totalCompletedTrips: 0,
+            completedTripsThisYear: 0,
             totalSpend: 0,
-            annualOmniaValue: 0,
             referralCode: '------',
             totalReferrals: 0,
             phone: '',
@@ -281,15 +398,13 @@ useEffect(() => {
     return () => { if (unsubscribeProfile) unsubscribeProfile() }
   }, [isInitialized, isAuthenticated, user])
 
-  // Fetch user data from Firestore (bookings only — profile and rewards use onSnapshot above)
+  // Fetch bookings
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
 
     async function fetchData() {
       try {
         setLoading(true)
-
-        // Fetch bookings using the service
         try {
           const firestoreBookings = await getUserBookings(user!.id)
           const bookingsList: Booking[] = firestoreBookings.map((b) => ({
@@ -317,12 +432,9 @@ useEffect(() => {
     fetchData()
   }, [isInitialized, isAuthenticated, user])
 
-
-
-  // Real-time listener: users/{uid}/coinsHistory → Rewards History section
+  // Real-time listener: coinsHistory → Rewards History
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
-
     let unsubscribe: (() => void) | null = null
 
     async function subscribeToHistory() {
@@ -348,7 +460,6 @@ useEffect(() => {
             createdAt: data.createdAt,
           })
         })
-        console.log('[Dashboard] coinsHistory length:', list.length)
         setRewards(list)
       }, (err: any) => {
         console.error('[Dashboard] coinsHistory listener error:', err)
@@ -360,10 +471,9 @@ useEffect(() => {
     return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
 
-  // Real-time listener: users/{uid}/favorites → Favorites section
+  // Real-time listener: favorites
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
-
     let unsubscribe: (() => void) | null = null
 
     async function subscribeToFavorites() {
@@ -376,10 +486,7 @@ useEffect(() => {
 
       unsubscribe = onSnapshot(favRef, (snap: any) => {
         const list: FavoritePackage[] = []
-        snap.forEach((d: any) => {
-          list.push(d.data() as FavoritePackage)
-        })
-        // sort locally by addedAt desc
+        snap.forEach((d: any) => list.push(d.data() as FavoritePackage))
         list.sort((a, b) => {
           const timeA = a.addedAt?.toMillis?.() || 0
           const timeB = b.addedAt?.toMillis?.() || 0
@@ -396,7 +503,7 @@ useEffect(() => {
     return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
 
-  // ── Passport: load existing data on mount ──────────────────────────────
+  // Passport: load on mount
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
     setPassportLoading(true)
@@ -411,7 +518,7 @@ useEffect(() => {
       .finally(() => setPassportLoading(false))
   }, [isInitialized, isAuthenticated, user])
 
-  // ── Passport: upload handler ────────────────────────────────────────────
+  // Passport: upload handler
   const handlePassportUpload = async () => {
     if (!user || !passportFile || !passportExpiryInput) {
       setPassportError('Please select a file and enter the expiry date.')
@@ -450,11 +557,11 @@ useEffect(() => {
   }
 
   const handleRemoveFavorite = async (packageId: string) => {
-    if (!user) return;
+    if (!user) return
     try {
-      await removeFromFavorites(user.id, packageId);
+      await removeFromFavorites(user.id, packageId)
     } catch (error) {
-      console.error('[Dashboard] Error removing favorite:', error);
+      console.error('[Dashboard] Error removing favorite:', error)
     }
   }
 
@@ -466,9 +573,7 @@ useEffect(() => {
         const { signOut } = modules.auth
         await signOut(auth)
       }
-    } catch {
-      // Ignore Firebase signout errors for hardcoded admin
-    }
+    } catch { /* ignore */ }
     storeLogout()
     router.replace('/login')
   }
@@ -529,6 +634,7 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -562,6 +668,7 @@ useEffect(() => {
           <>
             {/* Profile & Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
               {/* User Info */}
               <Card className="border-border/50 md:col-span-2 lg:col-span-2">
                 <CardContent className="p-5">
@@ -580,37 +687,48 @@ useEffect(() => {
                 </CardContent>
               </Card>
 
-              {/* Loyalty Points */}
+              {/* Loyalty Points + Tier */}
               <Card className="border-border/50">
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50">
                       <Star className="h-5 w-5 text-amber-500" />
                     </div>
-                    <p className="text-sm text-muted-foreground">Loyalty Points</p>
+                    <p className="text-sm text-muted-foreground">Omnia Coins</p>
                   </div>
-                  <p className="text-2xl font-bold text-foreground">{profile?.loyaltyPoints.toLocaleString() || 0}</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {profile?.loyaltyPoints.toLocaleString() ?? 0}
+                  </p>
 
-                  {/* ── Enhanced Tier Display ─────────────────────────────── */}
                   {profile && (() => {
                     const cfg = getTierConfig(profile.tier)
-                    const progress = getTierProgress(profile.tier, profile.totalCoinsEarned, profile.totalPackages, profile.totalSpend)
+                    // Tier progress uses completedTripsThisYear only
+                    const progress = getTierProgress(profile.tier, profile.completedTripsThisYear)
+
                     return (
                       <div className="mt-3 space-y-2.5" style={{ animation: 'tierFadeIn 0.5s ease-out' }}>
+
                         {/* Tier Badge */}
                         <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${cfg.badgeBg} ${cfg.badgeText} ${cfg.badgeBorder} transition-all duration-300`}>
-                          <span role="img" aria-label={cfg.name}>{cfg.icon}</span>
-                          <span>{cfg.name} Member</span>
+                          <span role="img" aria-label={cfg.label}>{cfg.icon}</span>
+                          <span>{cfg.label}</span>
                         </div>
 
-                        {/* Benefit text */}
+                        {/* Short benefit summary */}
                         <p className="text-xs text-muted-foreground leading-snug">{cfg.benefit}</p>
 
-                        {/* Progress bar */}
-                        {progress && (
+                        {/* Trips this year */}
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground">{profile.completedTripsThisYear}</span> completed trip{profile.completedTripsThisYear !== 1 ? 's' : ''} this membership year
+                        </p>
+
+                        {/* Progress to next tier */}
+                        {progress ? (
                           <div className="space-y-1">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-muted-foreground">Progress to {progress.nextIcon} {progress.nextTier}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Progress to {progress.nextIcon} {progress.nextLabel}
+                              </span>
                               <span className="text-xs font-semibold text-foreground">{progress.percent}%</span>
                             </div>
                             <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
@@ -620,15 +738,36 @@ useEffect(() => {
                               />
                             </div>
                             <p className="text-xs text-muted-foreground leading-snug">{progress.hint}</p>
+                            {progress.requiresApproval && progress.percent >= 100 && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                🕐 Pending Omnia team review (up to 5 business days)
+                              </p>
+                            )}
                           </div>
+                        ) : (
+                          <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                            👑 Maximum tier reached!
+                          </p>
                         )}
-                        {!progress && (
-                          <p className="text-xs font-medium text-purple-600 dark:text-purple-400">🏆 Maximum tier reached!</p>
-                        )}
+
+                        {/* Key benefits list for current tier */}
+                        <details className="group">
+                          <summary className="text-xs text-primary cursor-pointer hover:underline list-none flex items-center gap-1">
+                            <span>View tier benefits</span>
+                            <span className="group-open:rotate-90 transition-transform inline-block">›</span>
+                          </summary>
+                          <ul className="mt-2 space-y-1">
+                            {cfg.benefits.map((b, i) => (
+                              <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                <span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>
+                                {b}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       </div>
                     )
-                  })()
-                  }
+                  })()}
                   <style>{`@keyframes tierFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
                 </CardContent>
               </Card>
@@ -642,7 +781,10 @@ useEffect(() => {
                     </div>
                     <p className="text-sm text-muted-foreground">Referrals</p>
                   </div>
-                  <p className="text-2xl font-bold text-foreground">{profile?.totalReferrals || 0}</p>
+                  <p className="text-2xl font-bold text-foreground">{profile?.totalReferrals ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Earn 150–600 coins per successful referral
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -657,7 +799,9 @@ useEffect(() => {
                     </div>
                     <div>
                       <p className="font-medium text-foreground">Your Referral Code</p>
-                      <p className="text-sm text-muted-foreground">Share this code and earn rewards when friends sign up</p>
+                      <p className="text-sm text-muted-foreground">
+                        Earn 150 coins per individual · 350 for groups · 600 for corporate referrals
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -677,7 +821,7 @@ useEffect(() => {
               </CardContent>
             </Card>
 
-            {/* Loyalty Program Section */}
+            {/* Loyalty Program Card */}
             <Card className="border-border/50 mb-8">
               <CardContent className="p-5">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -687,7 +831,9 @@ useEffect(() => {
                     </div>
                     <div>
                       <p className="font-medium text-foreground">Loyalty Program</p>
-                      <p className="text-sm text-muted-foreground">Learn how to earn and redeem your loyalty points</p>
+                      <p className="text-sm text-muted-foreground">
+                        Earn 1 coin per ETB 1,000 spent · redeem for discounts up to 25%
+                      </p>
                     </div>
                   </div>
                   <a
@@ -696,13 +842,13 @@ useEffect(() => {
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-transparent text-sm font-medium text-foreground hover:bg-secondary transition-colors"
                   >
                     <Download className="h-4 w-4" />
-                    Download Loyalty Program PDF
+                    Download Loyalty PDF
                   </a>
                 </div>
               </CardContent>
             </Card>
 
-            {/* ── Passport Upload Section ──────────────────────────────────── */}
+            {/* ── Passport Section ─────────────────────────────────────────── */}
             <Card className="border-border/50 mb-8">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -719,22 +865,27 @@ useEffect(() => {
                 ) : (
                   <div className="space-y-6">
 
-                    {/* ── Existing passport display ── */}
+                    {/* Existing passport display */}
                     {passport && (() => {
-
-                      //
-                      {passport && getMonthsLeft(passport.expiryDate) <= 8 && (
-  <div className="mt-3 p-3 rounded-lg bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-sm font-medium">
-    ⚠️ Your passport will expire in less than 8 months. Please renew it soon.
-  </div>
-)}
-
-                      //
                       const daysLeft = calcDaysLeft(passport.expiryDate)
                       const status  = getPassportStatus(daysLeft)
+                      const monthsLeft = getMonthsLeft(passport.expiryDate)
                       return (
                         <div className="rounded-xl border border-border/50 bg-secondary/20 p-4 space-y-3">
                           <p className="text-sm font-semibold text-foreground">Current Passport</p>
+
+                          {/* ≤ 8 months warning */}
+                          {monthsLeft <= 8 && monthsLeft > 0 && (
+                            <div className="p-3 rounded-lg bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-sm font-medium">
+                              ⚠️ Your passport expires in {monthsLeft} month{monthsLeft !== 1 ? 's' : ''}. Please renew it soon.
+                            </div>
+                          )}
+                          {monthsLeft <= 0 && (
+                            <div className="p-3 rounded-lg bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-sm font-medium">
+                              ❌ Your passport has expired. Please renew immediately.
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                             {/* File link */}
                             <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border/40">
@@ -772,11 +923,7 @@ useEffect(() => {
                                   {daysLeft <= 0 ? '—' : `${daysLeft} days`}
                                 </p>
                               </div>
-                              <span
-                                className={`ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                                  status.bg
-                                } ${status.color} ${status.border}`}
-                              >
+                              <span className={`ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${status.bg} ${status.color} ${status.border}`}>
                                 <span>{status.emoji}</span>
                                 {status.label}
                               </span>
@@ -786,13 +933,12 @@ useEffect(() => {
                       )
                     })()}
 
-                    {/* ── Upload form ── */}
+                    {/* Upload form */}
                     <div className="space-y-4">
                       <p className="text-sm font-medium text-foreground">
                         {passport ? 'Replace Passport' : 'Upload Passport'}
                       </p>
 
-                      {/* File drop zone */}
                       <div
                         className="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border hover:border-primary transition-colors cursor-pointer p-8 bg-secondary/10 hover:bg-secondary/20"
                         onClick={() => passportInputRef.current?.click()}
@@ -817,7 +963,6 @@ useEffect(() => {
                         />
                       </div>
 
-                      {/* Expiry date */}
                       <div className="flex flex-col gap-1.5">
                         <label className="text-sm font-medium text-foreground" htmlFor="passportExpiryDate">
                           Passport Expiry Date
@@ -832,12 +977,10 @@ useEffect(() => {
                         />
                       </div>
 
-                      {/* Error */}
                       {passportError && (
                         <p className="text-sm text-red-500">{passportError}</p>
                       )}
 
-                      {/* Upload progress */}
                       {passportUploading && (
                         <div className="space-y-1">
                           <div className="flex justify-between text-xs text-muted-foreground">
@@ -853,7 +996,6 @@ useEffect(() => {
                         </div>
                       )}
 
-                      {/* Submit button */}
                       <Button
                         onClick={handlePassportUpload}
                         disabled={passportUploading || !passportFile || !passportExpiryInput}
@@ -885,9 +1027,7 @@ useEffect(() => {
                     </CardDescription>
                   </div>
                   <Link href="/tours">
-                    <Button variant="outline" size="sm" className="bg-transparent">
-                      Discover More
-                    </Button>
+                    <Button variant="outline" size="sm" className="bg-transparent">Discover More</Button>
                   </Link>
                 </div>
               </CardHeader>
@@ -897,24 +1037,22 @@ useEffect(() => {
                     <Heart className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
                     <p className="text-muted-foreground font-medium">No favorites yet</p>
                     <p className="text-sm text-muted-foreground mt-1">Packages you save will appear here</p>
-                    <Link href="/tours">
-                      <Button className="mt-4">Explore Packages</Button>
-                    </Link>
+                    <Link href="/tours"><Button className="mt-4">Explore Packages</Button></Link>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {favorites.map((fav) => (
                       <div key={fav.packageId} className="group relative overflow-hidden rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 transition-colors">
                         <div className="aspect-video w-full overflow-hidden relative">
-                          <img 
-                            src={fav.featuredImageURL || '/placeholder.svg'} 
+                          <img
+                            src={fav.featuredImageURL || '/placeholder.svg'}
                             alt={fav.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           />
                           <div className="absolute top-2 right-2">
-                            <Button 
-                              variant="destructive" 
-                              size="icon" 
+                            <Button
+                              variant="destructive"
+                              size="icon"
                               className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={() => handleRemoveFavorite(fav.packageId)}
                             >
@@ -934,9 +1072,7 @@ useEffect(() => {
                           </div>
                           <div className="mt-4">
                             <Link href={`/packages/${fav.packageId}`} className="block">
-                              <Button className="w-full" variant="outline" size="sm">
-                                View Details
-                              </Button>
+                              <Button className="w-full" variant="outline" size="sm">View Details</Button>
                             </Link>
                           </div>
                         </div>
@@ -961,9 +1097,7 @@ useEffect(() => {
                     </CardDescription>
                   </div>
                   <Link href="/tours">
-                    <Button variant="outline" size="sm" className="bg-transparent">
-                      Browse Tours
-                    </Button>
+                    <Button variant="outline" size="sm" className="bg-transparent">Browse Tours</Button>
                   </Link>
                 </div>
               </CardHeader>
@@ -973,9 +1107,7 @@ useEffect(() => {
                     <MapPin className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
                     <p className="text-muted-foreground font-medium">No bookings yet</p>
                     <p className="text-sm text-muted-foreground mt-1">Your upcoming trips will appear here</p>
-                    <Link href="/tours">
-                      <Button className="mt-4">Explore Tours</Button>
-                    </Link>
+                    <Link href="/tours"><Button className="mt-4">Explore Tours</Button></Link>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1023,22 +1155,14 @@ useEffect(() => {
                                   <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">Receipt Submitted</p>
                                   <div className="flex items-center justify-center gap-1.5 mt-1">
                                     <button
-                                      onClick={() => {
-                                        console.log('🧾 User receipt detected')
-                                        console.log('🧾 Opening receipt from user dashboard:', `/api/receipt/${booking.id}`)
-                                        window.open(`/api/receipt/${booking.id}`, '_blank')
-                                      }}
+                                      onClick={() => window.open(`/api/receipt/${booking.id}`, '_blank')}
                                       className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 rounded-md px-3 py-1 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer bg-transparent transition-colors"
                                     >
                                       <ExternalLink className="h-3 w-3" />
                                       View
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        console.log('🧾 User receipt detected')
-                                        console.log('🧾 Downloading receipt from user dashboard:', `/api/receipt/${booking.id}`)
-                                        window.open(`/api/receipt/${booking.id}`, '_blank')
-                                      }}
+                                      onClick={() => window.open(`/api/receipt/${booking.id}`, '_blank')}
                                       className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400 border border-green-300 dark:border-green-700 rounded-md px-3 py-1 hover:bg-green-50 dark:hover:bg-green-950/40 cursor-pointer bg-transparent transition-colors"
                                     >
                                       <Download className="h-3 w-3" />
@@ -1062,7 +1186,7 @@ useEffect(() => {
               </CardContent>
             </Card>
 
-            {/* Rewards Section */}
+            {/* Rewards History */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -1070,7 +1194,7 @@ useEffect(() => {
                   Rewards History
                 </CardTitle>
                 <CardDescription>
-                  {rewards.length} reward{rewards.length !== 1 ? 's' : ''} earned
+                  {rewards.length} transaction{rewards.length !== 1 ? 's' : ''}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1078,7 +1202,9 @@ useEffect(() => {
                   <div className="text-center py-12">
                     <Star className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
                     <p className="text-muted-foreground font-medium">No rewards yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">Book tours and refer friends to earn points</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Complete trips to earn coins · refer friends for bonus coins
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1088,18 +1214,27 @@ useEffect(() => {
                         className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${reward.type === 'referral'
+                          <div className={`p-2 rounded-lg ${
+                            reward.type === 'referral'
                               ? 'bg-blue-50 dark:bg-blue-950/50'
+                              : reward.type === 'redemption'
+                              ? 'bg-red-50 dark:bg-red-950/50'
+                              : reward.type === 'welcome_bonus'
+                              ? 'bg-green-50 dark:bg-green-950/50'
                               : 'bg-amber-50 dark:bg-amber-950/50'
-                            }`}>
+                          }`}>
                             {reward.type === 'referral' ? (
                               <Share2 className="h-4 w-4 text-blue-500" />
+                            ) : reward.type === 'redemption' ? (
+                              <Download className="h-4 w-4 text-red-500" />
+                            ) : reward.type === 'welcome_bonus' ? (
+                              <Gift className="h-4 w-4 text-green-500" />
                             ) : (
                               <Star className="h-4 w-4 text-amber-500" />
                             )}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-foreground">{reward.reason || 'Points earned'}</p>
+                            <p className="text-sm font-medium text-foreground">{reward.reason || 'Coins earned'}</p>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                               <Clock className="h-3 w-3" />
                               {formatDate(reward.createdAt)}
@@ -1109,8 +1244,12 @@ useEffect(() => {
                             </div>
                           </div>
                         </div>
-                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                          +{reward.points}
+                        <span className={`text-sm font-bold ${
+                          reward.points < 0
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-green-600 dark:text-green-400'
+                        }`}>
+                          {reward.points >= 0 ? '+' : ''}{reward.points}
                         </span>
                       </div>
                     ))}
@@ -1118,6 +1257,7 @@ useEffect(() => {
                 )}
               </CardContent>
             </Card>
+
           </>
         )}
       </div>

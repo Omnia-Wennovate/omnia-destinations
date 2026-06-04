@@ -1,17 +1,21 @@
 /**
  * POST /api/user/welcome-bonus
  *
- * Awards 1,000 welcome coins to a newly registered user.
+ * Awards 100 welcome coins to a user on their FIRST completed booking.
  * Uses Admin SDK (bypasses Firestore security rules).
  * Idempotent — safe to call multiple times.
+ *
+ * NOTE: This route should NOT be called during signup/registration.
+ * Welcome coins are awarded only after the first booking is completed,
+ * handled by awardWelcomeBonusAdmin() in loyalty.admin.ts.
+ *
+ * This route is kept as a fallback/manual trigger only.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
-
-const WELCOME_COINS = 1_000;
-const COINS_EXPIRY_MONTHS = 12;
+import { COINS_EXPIRY_MONTHS, WELCOME_BONUS_COINS } from "@/lib/services/loyalty.service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,11 +54,12 @@ export async function POST(req: NextRequest) {
 
     const txData = {
       userId,
-      coins: WELCOME_COINS,
-      amount: WELCOME_COINS,
+      coins: WELCOME_BONUS_COINS,
+      amount: WELCOME_BONUS_COINS,
       type: "welcome_bonus",
-      affectsTier: true,
-      reason: "Welcome bonus — thank you for joining Omnia!",
+      affectsTier: false, // welcome coins are a gift, not a tier-qualifying earn
+      relatedBookingId: null,
+      reason: "Welcome bonus — thank you for your first booking with Omnia!",
       multiplierApplied: 1,
       tierAtTime: "Hope",
       createdAt: FieldValue.serverTimestamp(),
@@ -78,9 +83,8 @@ export async function POST(req: NextRequest) {
     batch.set(
       userRef,
       {
-        loyaltyPoints: FieldValue.increment(WELCOME_COINS),
-        totalCoinsEarned: FieldValue.increment(WELCOME_COINS),
-        tierCoins: FieldValue.increment(WELCOME_COINS),
+        loyaltyPoints: FieldValue.increment(WELCOME_BONUS_COINS),
+        totalCoinsEarned: FieldValue.increment(WELCOME_BONUS_COINS),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -88,8 +92,8 @@ export async function POST(req: NextRequest) {
 
     await batch.commit();
 
-    console.log("[welcome-bonus] ✅ 1,000 coins awarded to:", userId);
-    return NextResponse.json({ success: true, coins: WELCOME_COINS });
+    console.log("[welcome-bonus] ✅ 100 coins awarded to:", userId);
+    return NextResponse.json({ success: true, coins: WELCOME_BONUS_COINS });
   } catch (error: any) {
     console.error("[welcome-bonus] Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

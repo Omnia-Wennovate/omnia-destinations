@@ -1,88 +1,56 @@
-/**
- * Omnia Loyalty Program — Core Service (v3)
- *
- * ── FIXES FROM v2 ────────────────────────────────────────────────────────────
- *
- * FIX 1 — calculateBaseCoins: divided by 10 instead of 100.
- *   Old: Math.floor(omniaServiceValue / 10)   → 10 coins per 100 ETB  ❌
- *   New: Math.floor(omniaServiceValue / 100)   → 1 coin per 100 ETB   ✓
- *
- * FIX 2 — TIERS minCoins thresholds were wrong.
- *   They were computed against the broken coin rate. Recalculated correctly:
- *     Explorer : 2 packages × avg 350,000 ETB service value → ~7,000 coins   (unchanged — coincidentally correct)
- *     Voyager  : 4 packages × avg 385,000 ETB               → ~15,400 coins  (unchanged)
- *     Elite    : 8 packages × avg 455,000 ETB               → ~36,400 coins  (unchanged)
- *     Royal    : 16 packages × avg 577,500 ETB              → ~92,400 coins  (unchanged)
- *   These are fine — the tier minCoins values are correct as stated.
- *   What was broken was calculateBaseCoins producing 10× too many coins,
- *   meaning users were hitting tier thresholds 10× faster than intended.
- *
- * FIX 3 — validateRedemption used wrong coin-to-ETB ratio.
- *   The cap is "30% of Omnia service fee". Coins are earned at 1 coin per 100 ETB,
- *   so 1 coin is worth 100 ETB when redeemed. The formula must be:
- *     maxRedeemable = floor((omniaServiceFee × 0.30) / 100)
- *   Old code already had this right (÷100), but the comment said "1 coin = 100 ETB"
- *   while calculateBaseCoins implied "1 coin = 10 ETB". Now both are consistent at
- *   1 coin = 100 ETB.
- *
- * FIX 4 — evaluateAndUpgradeTier was never triggered in some code paths.
- *   awardBookingCoins already calls it — that was correct.
- *   But if coinsStatus was already "awarded" (idempotency guard triggered on a
- *   re-run), the function returned early BEFORE calling evaluateAndUpgradeTier,
- *   meaning a retry could leave the user stuck at the old tier. Fixed: moved the
- *   idempotency guard return to happen AFTER a tier re-evaluation when coins are
- *   already awarded but tier might not have been updated yet.
- *
- * FIX 5 — tierCoins aggregate was not being initialised on new users.
- *   writeCoinTransaction increments tierCoins only when affectsTier=true AND
- *   amount>0. The welcome_bonus (1,000 coins, affectsTier=true) was already
- *   covered. No change needed — but added explicit check to ensure tierCoins
- *   field is initialised to 0 on the user doc if it doesn't exist, so
- *   evaluateTier never sees undefined.
- *
- * ── Unchanged design principles ───────────────────────────────────────────────
- * - All writes go through writeCoinTransaction() — NEVER direct
- * - writeCoinTransaction mirrors every entry to loyaltyTransactions (top-level)
- * - awardBookingCoins / reverseBookingCoins are idempotent
- * - Tier can only be UPGRADED automatically; downgrades require admin action
- * - Referral coins have affectsTier=false and are excluded from tier math
- * - Coins expire 24 months after createdAt (status="expired", not deleted)
- * - Redemption is capped at 30% of the Omnia service fee — FIFO deduction
- * - Every admin action writes to auditLogs with actionType + details
- *
- * Coin rate: 1 coin per 100 ETB of Omnia service value
- *   → coins = floor(omniaServiceValue / 100) × tierMultiplier
- *
- * Examples:
- *   ETB 70,000 service value  → 700 base coins (Hope tier, ×1.0)  = 700 coins
- *   ETB 70,000 service value  → 700 base coins (Explorer, ×1.2)   = 840 coins
- *   ETB 70,000 service value  → 700 base coins (Voyager, ×1.5)    = 1,050 coins
- *   ETB 70,000 service value  → 700 base coins (Elite, ×2.0)      = 1,400 coins
- *   ETB 70,000 service value  → 700 base coins (Royal, ×3.0)      = 2,100 coins
- */
-
 import { getFirebaseDb, getFirebaseModules } from "@/lib/firebase/config";
 import { logger } from "@/lib/logger";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const COINS_EXPIRY_MONTHS = 24;
-export const REDEMPTION_CAP_PERCENT = 0.30; // 30% of Omnia service fee
+export const COINS_EXPIRY_MONTHS = 12;
+export const COINS_EXTENSION_DAYS = 90;
+
+/**
+ * Coin earning rates per the loyalty program document.
+ *   Travel bookings:              1 coin per ETB 1,000 of invoice value
+ *   Merch / events / experiences: 1 coin per ETB 150 of invoice value
+ */
+export const TRAVEL_COIN_RATE = 1_000;   // ETB per 1 coin
+export const MERCH_COIN_RATE = 150;     // ETB per 1 coin
+
+/** Welcome bonus awarded on first booking (not registration). */
+export const WELCOME_BONUS_COINS = 100;
 
 // ── Tier definitions ──────────────────────────────────────────────────────────
 
-export type TierName = "Hope" | "Explorer" | "Voyager" | "Elite" | "Royal";
+/**
+ * Tier names match the loyalty document exactly:
+ *   Bronze  → Hope       (entry level, 0 completed trips)
+ *   Hope+   → HopePlus   (after 1st paid trip, auto-upgrade — sits between Bronze & Silver)
+ *   Silver  → Explorer   (2 completed trips / year, open enrolment)
+ *   Gold    → Royal      (3 completed trips / year, invite/approval)
+ *   Platinum→ Timeless   (4 completed trips / year, invite/approval)
+ *   Diamond → Diamond    (5+ completed trips / year, invite/approval)
+ *
+ * Qualification is based SOLELY on completed trips within a 12-month membership year.
+ * Referred trips that complete also count toward the referrer's personal trip total.
+ *
+ * Gold, Platinum, and Diamond require invite/approval — the system flags them for
+ * review; the Omnia team confirms within 5 business days. The `requiresApproval`
+ * field on the tier drives that review flow.
+ */
+export type TierName =
+  | "Hope"       // Bronze
+  | "HopePlus"   // Hope+ / Preferred
+  | "Explorer"   // Silver
+  | "Royal"      // Gold
+  | "Timeless"   // Platinum
+  | "Diamond";   // Diamond
 
 export interface Tier {
   name: TierName;
   label: string;
   multiplier: number;
-  /** Minimum completed packages (any one condition qualifies) */
-  minPackages: number;
-  /** Minimum tier-affecting coins earned */
-  minCoins: number;
-  /** Minimum total ETB spend */
-  minSpend: number;
+  /** Minimum completed trips in a 12-month membership year to qualify. */
+  minTrips: number;
+  /** If true, the Omnia team must confirm the upgrade before it is applied. */
+  requiresApproval: boolean;
   color: string;
 }
 
@@ -91,56 +59,86 @@ export const TIERS: Tier[] = [
     name: "Hope",
     label: "Hope (Bronze)",
     multiplier: 1.0,
-    minPackages: 0,
-    minCoins: 0,
-    minSpend: 0,
+    minTrips: 0,
+    requiresApproval: false,
     color: "bronze",
+  },
+  {
+    name: "HopePlus",
+    label: "Hope+ (Preferred)",
+    multiplier: 1.1,
+    minTrips: 1,
+    requiresApproval: false,
+    color: "bronze-plus",
   },
   {
     name: "Explorer",
     label: "Explorer (Silver)",
     multiplier: 1.2,
-    minPackages: 2,
-    minCoins: 7_000,
-    minSpend: 700_000,
+    minTrips: 2,
+    requiresApproval: false,
     color: "silver",
   },
   {
-    name: "Voyager",
-    label: "Voyager (Gold)",
+    name: "Royal",
+    label: "Royal (Gold)",
     multiplier: 1.5,
-    minPackages: 4,
-    minCoins: 15_400,
-    minSpend: 1_400_000,
+    minTrips: 3,
+    requiresApproval: true,
     color: "gold",
   },
   {
-    name: "Elite",
-    label: "Elite (Platinum)",
+    name: "Timeless",
+    label: "Timeless (Platinum)",
     multiplier: 2.0,
-    minPackages: 8,
-    minCoins: 36_400,
-    minSpend: 2_800_000,
+    minTrips: 4,
+    requiresApproval: true,
     color: "platinum",
   },
   {
-    name: "Royal",
-    label: "Royal (Diamond)",
+    name: "Diamond",
+    label: "Diamond",
     multiplier: 3.0,
-    minPackages: 16,
-    minCoins: 92_400,
-    minSpend: 5_600_000,
+    minTrips: 5,
+    requiresApproval: true,
     color: "diamond",
   },
 ];
 
+// ── Redemption threshold table ────────────────────────────────────────────────
+
+/**
+ * Coins are redeemed at fixed thresholds for a percentage discount on the
+ * next Omnia invoice. Unused coins above the chosen threshold carry forward.
+ *
+ * Coins CANNOT be applied to flights, hotels, visa fees, or any third-party
+ * charges — only to the Omnia service portion of the invoice.
+ */
+export interface RedemptionThreshold {
+  coinsRequired: number;
+  discountPercent: number;
+}
+
+export const REDEMPTION_THRESHOLDS: RedemptionThreshold[] = [
+  { coinsRequired: 100, discountPercent: 1 },
+  { coinsRequired: 250, discountPercent: 2 },
+  { coinsRequired: 500, discountPercent: 4 },
+  { coinsRequired: 1_000, discountPercent: 8 },
+  { coinsRequired: 2_000, discountPercent: 15 },
+  { coinsRequired: 3_500, discountPercent: 25 },
+];
+
 // ── Referral reward amounts ───────────────────────────────────────────────────
 
+/**
+ * Referral coins per the loyalty document.
+ * Credited only after the referred traveller's trip is fully completed.
+ * Referred trips also count toward the referrer's personal trip total (+1 trip).
+ */
 export const REFERRAL_COINS = {
-  individual: 2_500,
-  group: 15_000,
-  corporate: 25_000,
-  signup: 500,
+  individual: 150,   // single referred traveller
+  group: 350,   // group referral (5+ pax)
+  corporate: 600,   // corporate / delegation referral
 } as const;
 export type ReferralType = keyof typeof REFERRAL_COINS;
 
@@ -148,6 +146,7 @@ export type ReferralType = keyof typeof REFERRAL_COINS;
 
 export type CoinTransactionType =
   | "booking"
+  | "merch"
   | "referral"
   | "referral_signup"
   | "bonus"
@@ -179,96 +178,222 @@ export interface CoinTransaction {
 // ── Pure calculation helpers (no Firestore) ───────────────────────────────────
 
 /**
- * FIX 1: Base coins = floor(omniaServiceValue / 100)
- * i.e. 1 coin per 100 ETB of Omnia service value.
+ * Base coin calculation for a travel booking invoice.
+ * Rate: 1 coin per ETB 1,000 of total Omnia invoice value.
  *
- * v2 had Math.floor(omniaServiceValue / 10), which gave 10 coins per 100 ETB —
- * ten times too many. This caused users to reach tier thresholds far too quickly
- * and made the coin numbers shown in the UI 10× larger than intended.
- *
- * Examples (corrected):
- *   ETB 70,000  → 700 base coins
- *   ETB 350,000 → 3,500 base coins
- *   ETB 500,000 → 5,000 base coins
+ *   ETB 300,000 → 300 base coins
+ *   ETB 500,000 → 500 base coins
  */
-export function calculateBaseCoins(omniaServiceValue: number): number {
-  return Math.floor(omniaServiceValue / 10); // ← was /10 in v2
-}
-
-/** Apply tier multiplier to base coins */
-export function applyTierMultiplier(baseCoins: number, tier: TierName): number {
-  const tierDef = TIERS.find((t) => t.name === tier);
-  const multiplier = tierDef?.multiplier ?? 1.0;
-  return Math.floor(baseCoins * multiplier);
-}
-
-/** Full booking coin calculation: base × tier multiplier */
-export function calculateBookingCoins(omniaServiceValue: number, tier: TierName): number {
-  return applyTierMultiplier(calculateBaseCoins(omniaServiceValue), tier);
+export function calculateBaseTravelCoins(invoiceValue: number): number {
+  return Math.floor(invoiceValue / TRAVEL_COIN_RATE);
 }
 
 /**
- * Evaluate tier based on ANY of: totalPackages, tierCoins (coins excluding referral),
- * or totalSpend. Returns the highest qualifying tier.
+ * Base coin calculation for merch, events, experiences, or consulting.
+ * Rate: 1 coin per ETB 150 of invoice value.
  *
- * Any single criterion reaching a tier's threshold qualifies the user for that tier.
- * Tier is evaluated from highest (Royal) downward — the first tier the user
- * qualifies for is returned.
+ *   ETB 3,000 → 20 base coins
  */
-export function evaluateTier(params: {
-  totalPackages: number;
-  tierCoins: number;
-  totalSpend: number;
-}): TierName {
-  const { totalPackages, tierCoins, totalSpend } = params;
-  for (let i = TIERS.length - 1; i >= 0; i--) {
-    const t = TIERS[i];
-    if (
-      totalPackages >= t.minPackages ||
-      tierCoins >= t.minCoins ||
-      totalSpend >= t.minSpend
-    ) {
-      return t.name;
-    }
-  }
-  return "Hope";
+export function calculateBaseMerchCoins(invoiceValue: number): number {
+  return Math.floor(invoiceValue / MERCH_COIN_RATE);
 }
 
-/** Get tier multiplier for a given tier name */
+/** Apply a tier multiplier to a base coin amount, rounding to nearest whole coin. */
+export function applyTierMultiplier(baseCoins: number, tier: TierName): number {
+  const tierDef = TIERS.find((t) => t.name === tier);
+  const multiplier = tierDef?.multiplier ?? 1.0;
+  return Math.round(baseCoins * multiplier);
+}
+
+/** Full travel booking coin calculation: base × tier multiplier. */
+export function calculateBookingCoins(invoiceValue: number, tier: TierName): number {
+  return applyTierMultiplier(calculateBaseTravelCoins(invoiceValue), tier);
+}
+
+/** Full merch / event / experience coin calculation: base × tier multiplier. */
+export function calculateMerchCoins(invoiceValue: number, tier: TierName): number {
+  return applyTierMultiplier(calculateBaseMerchCoins(invoiceValue), tier);
+}
+
+/** Get tier multiplier for a given tier name. */
 export function getTierMultiplier(tier: TierName): number {
   return TIERS.find((t) => t.name === tier)?.multiplier ?? 1.0;
 }
 
 /**
- * Validate a redemption request.
- * Returns { valid, maxRedeemable, error? }
+ * Evaluate the highest tier a user qualifies for based solely on the number
+ * of completed trips in the current 12-month membership year.
  *
- * The cap is 30% of the Omnia service fee converted to coins.
- * Rate: 1 coin = 100 ETB, so maxRedeemable = floor(fee × 0.30 / 100).
+ * Tiers that require approval (Gold/Platinum/Diamond) are flagged with
+ * `pendingApproval = true` so the caller can initiate an Omnia review instead
+ * of immediately upgrading the user.
+ *
+ * Never downgrades — if newTier index ≤ currentTier index, returns currentTier.
+ */
+export function evaluateTier(params: {
+  completedTripsThisYear: number;
+  currentTier: TierName;
+}): { newTier: TierName; pendingApproval: boolean } {
+  const { completedTripsThisYear, currentTier } = params;
+
+  // Walk from highest tier down to find the best qualifying tier.
+  let qualifyingTier = TIERS[0]; // default: Hope
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (completedTripsThisYear >= TIERS[i].minTrips) {
+      qualifyingTier = TIERS[i];
+      break;
+    }
+  }
+
+  const currentIdx = TIERS.findIndex((t) => t.name === currentTier);
+  const newIdx = TIERS.findIndex((t) => t.name === qualifyingTier.name);
+
+  // Never downgrade.
+  if (newIdx <= currentIdx) {
+    return { newTier: currentTier, pendingApproval: false };
+  }
+
+  return {
+    newTier: qualifyingTier.name,
+    pendingApproval: qualifyingTier.requiresApproval,
+  };
+}
+
+/**
+ * Given a coin balance, return the best available redemption threshold the
+ * user can reach, and what discount it provides.
+ * Returns null if balance is below the minimum threshold (100 coins).
+ */
+export function getBestRedemptionThreshold(
+  coinBalance: number,
+  preferredCoins?: number
+): RedemptionThreshold | null {
+  if (preferredCoins !== undefined) {
+    // Find the exact threshold matching the user's chosen coin amount.
+    return (
+      REDEMPTION_THRESHOLDS.find((t) => t.coinsRequired === preferredCoins) ?? null
+    );
+  }
+  // Return the highest threshold the user can afford.
+  const affordable = REDEMPTION_THRESHOLDS.filter((t) => t.coinsRequired <= coinBalance);
+  return affordable.length > 0 ? affordable[affordable.length - 1] : null;
+}
+
+/**
+ * Calculate the ETB discount amount for a given redemption threshold applied
+ * to an Omnia service invoice value.
+ *
+ *   500 coins (4%) on ETB 350,000 → ETB 14,000 discount
+ */
+export function calculateRedemptionDiscount(params: {
+  threshold: RedemptionThreshold;
+  omniaServiceInvoiceValue: number;
+}): number {
+  return Math.floor(
+    params.omniaServiceInvoiceValue * (params.threshold.discountPercent / 100)
+  );
+}
+
+/**
+ * Validate a redemption request against the threshold table and the user's
+ * current coin balance.
+ *
+ * Rules:
+ *   - The requested coin amount must exactly match one of the threshold levels.
+ *   - The user must have at least that many coins.
+ *   - Coins cannot exceed invoice value (sanity guard).
  */
 export function validateRedemption(params: {
   requestedCoins: number;
   userBalance: number;
-  omniaServiceFee: number;
-}): { valid: boolean; maxRedeemable: number; error?: string } {
-  const { requestedCoins, userBalance, omniaServiceFee } = params;
-  // 30% of fee in ETB, then convert to coins at 100 ETB per coin
-  const maxRedeemable = Math.floor((omniaServiceFee * REDEMPTION_CAP_PERCENT) / 100);
+  omniaServiceInvoiceValue: number;
+}): { valid: boolean; threshold: RedemptionThreshold | null; error?: string } {
+  const { requestedCoins, userBalance, omniaServiceInvoiceValue } = params;
 
-  if (requestedCoins > userBalance) {
-    return { valid: false, maxRedeemable, error: "Insufficient coin balance." };
-  }
-  if (requestedCoins > maxRedeemable) {
+  const threshold = REDEMPTION_THRESHOLDS.find(
+    (t) => t.coinsRequired === requestedCoins
+  );
+  if (!threshold) {
     return {
       valid: false,
-      maxRedeemable,
-      error: `Cannot redeem more than ${maxRedeemable} coins (30% of Omnia service fee).`,
+      threshold: null,
+      error: `Invalid redemption amount. Choose from: ${REDEMPTION_THRESHOLDS.map(
+        (t) => t.coinsRequired
+      ).join(", ")} coins.`,
     };
   }
-  return { valid: true, maxRedeemable };
+  if (requestedCoins > userBalance) {
+    return {
+      valid: false,
+      threshold,
+      error: `Insufficient coin balance. You have ${userBalance} coins.`,
+    };
+  }
+  if (omniaServiceInvoiceValue <= 0) {
+    return {
+      valid: false,
+      threshold,
+      error: "Invoice value must be greater than zero.",
+    };
+  }
+  return { valid: true, threshold };
 }
 
 // ── Firestore helpers ─────────────────────────────────────────────────────────
+
+// ── 90-day expiry extension ───────────────────────────────────────────────────
+
+/**
+ * When a user earns new coins before existing coins expire, extend all active
+ * (unexpired) coin records' expiresAt by 90 days.
+ *
+ * Per the Omnia Loyalty Program document:
+ *   "When a user earns new coins before expiry: Extend balance by 90 days."
+ *
+ * Only extends records where status === "active" and expiresAt is in the future.
+ * Does NOT modify expired or reversed records.
+ * Does NOT create duplicate transactions or award extra coins.
+ */
+async function extendActiveCoinsExpiry(userId: string): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+  if (!db || !modules.firestore) return;
+
+  const { collection, query, where, getDocs, doc, updateDoc } = modules.firestore;
+
+  const now = new Date().toISOString();
+
+  const snap = await getDocs(
+    query(
+      collection(db, "users", userId, "coinsHistory"),
+      where("status", "==", "active")
+    )
+  );
+
+  const updates: Promise<void>[] = [];
+  snap.forEach((d: any) => {
+    const txData = d.data();
+    // Only extend records that have an expiry and haven't expired yet
+    if (txData.expiresAt && txData.expiresAt > now && txData.amount > 0) {
+      const currentExpiry = new Date(txData.expiresAt);
+      currentExpiry.setDate(currentExpiry.getDate() + COINS_EXTENSION_DAYS);
+      updates.push(
+        updateDoc(
+          doc(db, "users", userId, "coinsHistory", d.id),
+          { expiresAt: currentExpiry.toISOString() }
+        )
+      );
+    }
+  });
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
+    logger.log(
+      "[extendActiveCoinsExpiry] Extended", updates.length,
+      "active coin records by", COINS_EXTENSION_DAYS, "days for:", userId
+    );
+  }
+}
 
 /**
  * Write a coin transaction to:
@@ -278,8 +403,12 @@ export function validateRedemption(params: {
  * Also atomically updates loyaltyPoints + totalCoinsEarned on the user doc.
  *
  * affectsTier:
- *   - true  → booking, bonus, welcome_bonus, admin_adjustment, manual
- *   - false → referral, redemption, expiry, reversal
+ *   - true  → booking, merch, bonus, welcome_bonus, admin_adjustment, manual
+ *   - false → referral, referral_signup, redemption, expiry, reversal
+ *
+ * NOTE: Tier progression is based on completed trips, NOT coin totals.
+ *       The affectsTier flag is retained for record-keeping but does not
+ *       drive tier evaluation (that is handled by completedTripsThisYear).
  */
 export async function writeCoinTransaction(params: {
   userId: string;
@@ -291,7 +420,7 @@ export async function writeCoinTransaction(params: {
   tierAtTime?: TierName;
   status?: CoinTransactionStatus;
   affectsTier?: boolean;
-  /** Pass false to skip updating loyaltyPoints (used during FIFO deduction) */
+  /** Pass false to skip updating loyaltyPoints (used during FIFO deduction). */
   updateBalance?: boolean;
 }): Promise<string> {
   const db = await getFirebaseDb();
@@ -308,7 +437,7 @@ export async function writeCoinTransaction(params: {
     serverTimestamp,
   } = modules.firestore;
 
-  // Resolve current tier for the transaction record
+  // Resolve current tier for the transaction record.
   let tierAtTime: TierName = params.tierAtTime ?? "Hope";
   if (!params.tierAtTime) {
     try {
@@ -319,7 +448,13 @@ export async function writeCoinTransaction(params: {
 
   const multiplierApplied = params.multiplierApplied ?? getTierMultiplier(tierAtTime);
 
-  const NON_TIER_TYPES: CoinTransactionType[] = ["referral", "referral_signup", "redemption", "expiry", "reversal"];
+  const NON_TIER_TYPES: CoinTransactionType[] = [
+    "referral",
+    "referral_signup",
+    "redemption",
+    "expiry",
+    "reversal",
+  ];
   const affectsTier =
     params.affectsTier !== undefined
       ? params.affectsTier
@@ -353,7 +488,7 @@ export async function writeCoinTransaction(params: {
     status: params.status ?? (params.amount >= 0 ? "active" : "reversed"),
   };
 
-  // 1. Write to users/{uid}/coinsHistory
+  // 1. Write to users/{uid}/coinsHistory.
   const historyRef = collection(db, "users", params.userId, "coinsHistory");
   const txRef = await addDoc(historyRef, txData);
   logger.log(
@@ -364,7 +499,7 @@ export async function writeCoinTransaction(params: {
     "affectsTier:", affectsTier
   );
 
-  // 2. Mirror to top-level loyaltyTransactions collection
+  // 2. Mirror to top-level loyaltyTransactions.
   try {
     await addDoc(collection(db, "loyaltyTransactions"), {
       ...txData,
@@ -372,10 +507,19 @@ export async function writeCoinTransaction(params: {
     });
   } catch (err) {
     console.error("[writeCoinTransaction] loyaltyTransactions mirror failed:", err);
-    // Non-fatal — coinsHistory is the primary record
+    // Non-fatal — coinsHistory is the primary record.
   }
 
-  // 3. Update user balance
+  // 3. Update user balance.
+  // ── 90-day expiry extension: when new coins are earned, extend active coins ──
+  if (isEarnType) {
+    try {
+      await extendActiveCoinsExpiry(params.userId);
+    } catch (err) {
+      console.error("[writeCoinTransaction] expiry extension failed (non-fatal):", err);
+    }
+  }
+
   if (params.updateBalance !== false) {
     const userUpdate: Record<string, any> = {
       loyaltyPoints: increment(params.amount),
@@ -384,11 +528,6 @@ export async function writeCoinTransaction(params: {
     if (isEarnType) {
       userUpdate.totalCoinsEarned = increment(params.amount);
     }
-    if (affectsTier && params.amount > 0) {
-      userUpdate.tierCoins = increment(params.amount);
-    }
-    // FIX 5: Ensure tierCoins field always exists so evaluateTier never sees undefined.
-    // setDoc with merge:true creates the field only when absent.
     await setDoc(doc(db, "users", params.userId), userUpdate, { merge: true });
     logger.log(
       "[writeCoinTransaction] user balance updated for:", params.userId,
@@ -402,9 +541,8 @@ export async function writeCoinTransaction(params: {
 // ── Welcome Bonus ─────────────────────────────────────────────────────────────
 
 /**
- * Award 1,000 welcome coins when a new user registers.
- * Idempotent — checks for existing welcome_bonus transaction before awarding.
- * affectsTier=true so these coins count toward tier progression.
+ * Award 100 welcome coins on the user's FIRST booking (not on registration).
+ * Idempotent — checks for an existing welcome_bonus transaction before awarding.
  */
 export async function awardWelcomeBonus(userId: string): Promise<void> {
   const db = await getFirebaseDb();
@@ -427,34 +565,35 @@ export async function awardWelcomeBonus(userId: string): Promise<void> {
 
     await writeCoinTransaction({
       userId,
-      amount: 1_000,
+      amount: WELCOME_BONUS_COINS, // 100 coins per program document
       type: "welcome_bonus",
-      reason: "Welcome bonus — thank you for joining Omnia!",
+      reason: "Welcome bonus — thank you for your first booking with Omnia!",
       multiplierApplied: 1,
       tierAtTime: "Hope",
-      affectsTier: true,
+      affectsTier: false, // welcome coins are a gift, not a tier-affecting earn
       status: "active",
     });
-    logger.log("[awardWelcomeBonus] 1,000 welcome coins awarded to:", userId);
+    logger.log("[awardWelcomeBonus] 100 welcome coins awarded to:", userId);
   } catch (err) {
     logger.error("[awardWelcomeBonus] Failed:", err);
-    // Non-fatal — don't block registration
+    // Non-fatal — don't block the booking flow.
   }
 }
 
 // ── Award / Reverse booking coins ─────────────────────────────────────────────
 
 /**
- * Award coins for a completed booking.
- * Idempotent — checks coinsStatus === "awarded" before writing.
+ * Award coins for a completed booking (travel).
  *
- * FIX 4: Previously, when coinsStatus was already "awarded" (idempotency guard),
- * the function returned early without calling evaluateAndUpgradeTier. This meant
- * a retry (e.g. after a failed first attempt that still wrote the booking update)
- * could leave the user at "Hope" tier even though coins were recorded.
+ * Flow:
+ *   1. Check booking exists, is paid, and is completed/confirmed.
+ *   2. Award welcome bonus if this is the user's first booking.
+ *   3. Calculate coins: floor(invoiceValue / 1,000) × tier multiplier.
+ *   4. Write coin transaction.
+ *   5. Increment completedTripsThisYear on the user document.
+ *   6. Evaluate and (if warranted) trigger tier upgrade review.
  *
- * The fix: always call evaluateAndUpgradeTier even in the already-awarded path,
- * so a second call is a safe no-op for coins but still triggers tier evaluation.
+ * Idempotent — guarded by booking.coinsStatus === "awarded".
  */
 export async function awardBookingCoins(bookingId: string): Promise<void> {
   const db = await getFirebaseDb();
@@ -473,19 +612,28 @@ export async function awardBookingCoins(bookingId: string): Promise<void> {
   const booking = bookingSnap.data() as any;
   console.log("[awardBookingCoins] Booking data:", booking);
 
-  // FIX 4: Idempotency guard — skip coin write, but STILL evaluate tier.
+  // Idempotency guard — skip coin write but still evaluate tier in case a
+  // prior run wrote the booking update but failed before evaluating tier.
   if (booking.coinsStatus === "awarded") {
-    console.log("[awardBookingCoins] Coins already awarded for:", bookingId, "— re-evaluating tier");
+    console.log(
+      "[awardBookingCoins] Coins already awarded for:",
+      bookingId,
+      "— re-evaluating tier"
+    );
     await evaluateAndUpgradeTier(booking.userId);
     return;
   }
 
- const userId: string = booking.userId;
-let value: number = booking.omniaServiceValue || 0;
-if (value <= 0) {
-  value = Number(booking.totalAmount ?? booking.amount ?? 0);
-  console.log("[awardBookingCoins] omniaServiceValue was 0/missing — using totalAmount:", value);
-}
+  const userId: string = booking.userId;
+  // Prefer the explicit Omnia invoice value; fall back to totalAmount.
+  let invoiceValue: number = booking.omniaServiceValue || 0;
+  if (invoiceValue <= 0) {
+    invoiceValue = Number(booking.totalAmount ?? booking.amount ?? 0);
+    console.log(
+      "[awardBookingCoins] omniaServiceValue was 0/missing — using totalAmount:",
+      invoiceValue
+    );
+  }
 
   if (!userId) { logger.log("[awardBookingCoins] Missing userId"); return; }
   if (booking.paymentStatus !== "paid") {
@@ -501,35 +649,42 @@ if (value <= 0) {
   const userData = userSnap.exists() ? (userSnap.data() as any) : {};
   const currentTier: TierName = userData.tier ?? "Hope";
 
-  // FIX 1 is applied here automatically via calculateBookingCoins → calculateBaseCoins
-  const coins = calculateBookingCoins(value, currentTier);
-  console.log("[awardBookingCoins] Coins to award:", coins, "tier:", currentTier, "value:", value);
+  // Award welcome bonus on first booking.
+  await awardWelcomeBonus(userId);
+
+  // Coins: 1 per ETB 1,000 × tier multiplier.
+  const coins = calculateBookingCoins(invoiceValue, currentTier);
+  console.log(
+    "[awardBookingCoins] Coins to award:", coins,
+    "tier:", currentTier,
+    "invoiceValue:", invoiceValue
+  );
 
   await writeCoinTransaction({
     userId,
     amount: coins,
     type: "booking",
     relatedBookingId: bookingId,
-    reason: `Booking coins: ${booking.packageTitle ?? bookingId} (${value.toLocaleString()} ETB Omnia value)`,
+    reason: `Booking coins: ${booking.packageTitle ?? bookingId} (ETB ${invoiceValue.toLocaleString()} invoice)`,
     tierAtTime: currentTier,
     multiplierApplied: getTierMultiplier(currentTier),
     affectsTier: true,
     status: "active",
   });
 
-  // Update user aggregates
+  // Increment completed trips counter (12-month window managed separately).
   await setDoc(
     doc(db, "users", userId),
     {
-      totalPackages: increment(1),
-      totalSpend: increment(value),
-      annualOmniaValue: increment(value),
+      completedTripsThisYear: increment(1),
+      totalCompletedTrips: increment(1),
+      totalSpend: increment(invoiceValue),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
 
-  // Mark booking as awarded
+  // Mark booking as coins-awarded.
   await updateDoc(bookingRef, {
     coinsStatus: "awarded",
     coinsEarned: coins,
@@ -538,20 +693,59 @@ if (value <= 0) {
 
   logger.log("[awardBookingCoins] LOYALTY AWARDED:", coins, "coins to", userId);
 
-  // Always evaluate tier after awarding (this is what updates the tier in Firebase + UI)
+  // Evaluate tier after every completed booking.
   await evaluateAndUpgradeTier(userId);
+}
+
+/**
+ * Award coins for a merch / event / experience / consulting purchase.
+ * Rate: 1 coin per ETB 150.
+ */
+export async function awardMerchCoins(params: {
+  userId: string;
+  invoiceValue: number;
+  relatedBookingId?: string;
+  itemDescription: string;
+}): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+  if (!db || !modules.firestore) return;
+
+  const { doc, getDoc } = modules.firestore;
+
+  const userSnap = await getDoc(doc(db, "users", params.userId));
+  const currentTier: TierName = userSnap.exists()
+    ? ((userSnap.data() as any).tier ?? "Hope")
+    : "Hope";
+
+  const coins = calculateMerchCoins(params.invoiceValue, currentTier);
+
+  await writeCoinTransaction({
+    userId: params.userId,
+    amount: coins,
+    type: "merch",
+    relatedBookingId: params.relatedBookingId,
+    reason: `Merch/event coins: ${params.itemDescription} (ETB ${params.invoiceValue.toLocaleString()})`,
+    tierAtTime: currentTier,
+    multiplierApplied: getTierMultiplier(currentTier),
+    affectsTier: true,
+    status: "active",
+  });
+
+  logger.log("[awardMerchCoins] Awarded:", coins, "coins to", params.userId);
 }
 
 /**
  * Reverse coins for a cancelled or refunded booking.
  * Prevents negative balances. Never downgrades tier automatically.
+ * Decrements completedTripsThisYear so the user's trip count stays accurate.
  */
 export async function reverseBookingCoins(bookingId: string): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) throw new Error("Database not initialized");
 
-  const { doc, getDoc, updateDoc, serverTimestamp } = modules.firestore;
+  const { doc, getDoc, updateDoc, setDoc, increment, serverTimestamp } = modules.firestore;
 
   const bookingRef = doc(db, "bookings", bookingId);
   const bookingSnap = await getDoc(bookingRef);
@@ -583,6 +777,18 @@ export async function reverseBookingCoins(bookingId: string): Promise<void> {
     });
   }
 
+  // Decrement the completed trip counter so the user's tier re-evaluation
+  // reflects accurate trip counts going forward.
+  await setDoc(
+    doc(db, "users", userId),
+    {
+      completedTripsThisYear: increment(-1),
+      totalCompletedTrips: increment(-1),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
   await updateDoc(bookingRef, {
     coinsStatus: "reversed",
     updatedAt: serverTimestamp(),
@@ -592,74 +798,95 @@ export async function reverseBookingCoins(bookingId: string): Promise<void> {
 // ── Tier evaluation ───────────────────────────────────────────────────────────
 
 /**
- * Evaluate and upgrade a user's tier using all three criteria.
- * Never downgrades automatically.
- * Writes to users/{uid}/tierHistory when a change occurs.
+ * Evaluate and (if warranted) upgrade a user's tier.
  *
- * Called after every booking coin award and every admin coin adjustment.
- * This is the only function that writes tier changes to Firestore —
- * and therefore the only reason a tier would stay "Hope" is if this
- * function is never reached. FIX 4 ensures it is always reached.
+ * Qualification criterion: completed trips in the current 12-month
+ * membership year (stored as completedTripsThisYear on the user document).
+ *
+ * Tiers requiring approval (Gold/Platinum/Diamond):
+ *   - The user's tier is NOT immediately changed.
+ *   - Instead, a pendingTierReview document is written so the Omnia team
+ *     can confirm the upgrade within 5 business days.
+ *   - Until confirmed, the previous tier benefits remain active.
+ *
+ * Open-enrolment tiers (Bronze/Hope+/Silver):
+ *   - Tier is updated immediately.
+ *
+ * Never downgrades automatically.
+ * Writes to users/{uid}/tierHistory on every confirmed change.
  */
 export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) return;
 
-  const { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp } =
-    modules.firestore;
+  const {
+    doc, getDoc, setDoc, collection, addDoc, serverTimestamp,
+  } = modules.firestore;
 
   const userRef = doc(db, "users", userId);
   const userSnap = await getDoc(userRef);
   if (!userSnap.exists()) return;
 
   const data = userSnap.data() as any;
-  const totalPackages: number = data.totalPackages ?? 0;
-  const totalSpend: number = data.totalSpend ?? 0;
+  const completedTripsThisYear: number = data.completedTripsThisYear ?? 0;
   const currentTier: TierName = data.tier ?? "Hope";
 
-  // Prefer pre-aggregated tierCoins (avoids O(n) subcollection scan).
-  // Falls back to summing coinsHistory for accounts created before this field existed.
-  let tierCoins: number;
-  if (typeof data.tierCoins === "number") {
-    tierCoins = data.tierCoins;
-  } else {
-    tierCoins = 0;
-    try {
-      const histSnap = await getDocs(
-        query(
-          collection(db, "users", userId, "coinsHistory"),
-          where("affectsTier", "==", true)
-        )
-      );
-      histSnap.forEach((d: any) => {
-        const amt = d.data().amount ?? d.data().coins ?? 0;
-        if (amt > 0) tierCoins += amt;
-      });
-    } catch {
-      tierCoins = data.totalCoinsEarned ?? 0;
-    }
+  // Skip evaluation if a manual admin override is in place.
+  if (data.tierOverriddenByAdmin) {
+    logger.log("[evaluateAndUpgradeTier] Admin override active — skipping auto-eval for:", userId);
+    return;
   }
 
-  const currentIdx = TIERS.findIndex((t) => t.name === currentTier);
-  const newTier = evaluateTier({ totalPackages, tierCoins, totalSpend });
-  const newIdx = TIERS.findIndex((t) => t.name === newTier);
+  const { newTier, pendingApproval } = evaluateTier({
+    completedTripsThisYear,
+    currentTier,
+  });
 
   logger.log(
     "[evaluateAndUpgradeTier]",
     userId,
-    "packages:", totalPackages,
-    "tierCoins:", tierCoins,
-    "totalSpend:", totalSpend,
+    "completedTripsThisYear:", completedTripsThisYear,
     "currentTier:", currentTier,
-    "→ evaluates to:", newTier
+    "→ evaluates to:", newTier,
+    "pendingApproval:", pendingApproval
   );
+
+  const currentIdx = TIERS.findIndex((t) => t.name === currentTier);
+  const newIdx = TIERS.findIndex((t) => t.name === newTier);
 
   if (newIdx <= currentIdx) {
     logger.log("[evaluateAndUpgradeTier] No upgrade needed — already at", currentTier);
     return;
   }
 
+  if (pendingApproval) {
+    // Write a review request for the Omnia team; do not change the tier yet.
+    await setDoc(
+      doc(db, "tierReviews", `${userId}_${newTier}`),
+      {
+        userId,
+        currentTier,
+        requestedTier: newTier,
+        completedTripsThisYear,
+        status: "pending",
+        requestedAt: serverTimestamp(),
+        reviewDeadline: (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 5); // 5 business days
+          return d.toISOString();
+        })(),
+      },
+      { merge: true }
+    );
+    logger.log(
+      "[evaluateAndUpgradeTier] Tier review requested for:", userId,
+      "→", newTier, "(pending Omnia approval)"
+    );
+    return;
+  }
+
+  // Open-enrolment upgrade — apply immediately.
   await setDoc(
     userRef,
     {
@@ -673,11 +900,71 @@ export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
   await addDoc(collection(db, "users", userId, "tierHistory"), {
     previousTier: currentTier,
     newTier,
-    reason: `Automatic upgrade: packages=${totalPackages}, tierCoins=${tierCoins}, totalSpend=${totalSpend}`,
+    reason: `Automatic upgrade: completedTripsThisYear=${completedTripsThisYear}`,
     changedAt: serverTimestamp(),
   });
 
   logger.log("[evaluateAndUpgradeTier] Upgraded:", userId, "from", currentTier, "to", newTier);
+}
+
+/**
+ * Called by the Omnia admin panel to confirm a pending tier upgrade review.
+ * Sets the user's tier to the reviewed/approved value.
+ */
+export async function confirmTierUpgrade(params: {
+  adminId: string;
+  targetUserId: string;
+  approvedTier: TierName;
+  notes?: string;
+}): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+  if (!db || !modules.firestore) throw new Error("Database not initialized");
+
+  const { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } = modules.firestore;
+
+  const userSnap = await getDoc(doc(db, "users", params.targetUserId));
+  const previousTier: TierName = userSnap.exists()
+    ? ((userSnap.data() as any).tier ?? "Hope")
+    : "Hope";
+
+  await setDoc(
+    doc(db, "users", params.targetUserId),
+    {
+      tier: params.approvedTier,
+      tierOverriddenByAdmin: false,
+      tierUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // Close the review request.
+  await setDoc(
+    doc(db, "tierReviews", `${params.targetUserId}_${params.approvedTier}`),
+    { status: "approved", reviewedAt: serverTimestamp(), adminId: params.adminId },
+    { merge: true }
+  );
+
+  await addDoc(collection(db, "users", params.targetUserId, "tierHistory"), {
+    previousTier,
+    newTier: params.approvedTier,
+    reason: `Omnia team confirmed upgrade${params.notes ? ": " + params.notes : ""}`,
+    changedAt: serverTimestamp(),
+  });
+
+  await addDoc(collection(db, "auditLogs"), {
+    adminId: params.adminId,
+    actionType: "tier_upgrade_confirmed",
+    targetUserId: params.targetUserId,
+    details: { previousTier, newTier: params.approvedTier, notes: params.notes },
+    createdAt: serverTimestamp(),
+  });
+
+  logger.log(
+    "[confirmTierUpgrade] Confirmed:", params.targetUserId,
+    "from", previousTier, "to", params.approvedTier
+  );
 }
 
 // ── Referral coins ────────────────────────────────────────────────────────────
@@ -685,14 +972,24 @@ export async function evaluateAndUpgradeTier(userId: string): Promise<void> {
 /**
  * Award referral coins after a referred client completes travel.
  * Idempotent — uses referrals/{idempotencyKey} as a guard document.
- * CRITICAL: referral coins do NOT count toward tier progression (affectsTier=false).
+ *
+ * Per program rules:
+ *   - Coins are awarded ONLY after the referred traveller's trip is fully completed.
+ *   - Referral coins do NOT count toward tier (affectsTier=false).
+ *   - The referred trip DOES count as +1 toward the referrer's personal trip total
+ *     for tier qualification purposes.
+ *
+ * Cancellation rules:
+ *   - If the referred person cancels before travel begins → no coins.
+ *   - If they cancel mid-trip → coins awarded proportionally (pass partialFraction).
  */
 export async function awardReferralCoins(params: {
   referrerId: string;
   referredUserId: string;
   referralType: ReferralType;
   relatedBookingId: string;
-  corporateCoins?: number;
+  /** For partial completions (mid-trip cancellation): 0.0–1.0. Defaults to 1.0. */
+  partialFraction?: number;
 }): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
@@ -705,10 +1002,19 @@ export async function awardReferralCoins(params: {
   const existing = await getDoc(referralRef);
   if (existing.exists() && existing.data()?.status === "completed") return;
 
-  const coins =
-    params.referralType === "corporate" && params.corporateCoins !== undefined
-      ? Math.min(params.corporateCoins, REFERRAL_COINS.corporate)
-      : REFERRAL_COINS[params.referralType];
+  const fraction = params.partialFraction !== undefined
+    ? Math.min(1, Math.max(0, params.partialFraction))
+    : 1.0;
+
+  const baseCoins = REFERRAL_COINS[params.referralType];
+  const coins = fraction < 1.0
+    ? Math.floor(baseCoins * fraction)
+    : baseCoins;
+
+  if (coins <= 0) {
+    logger.log("[awardReferralCoins] No coins to award (0 or cancelled before travel)");
+    return;
+  }
 
   const referrerSnap = await getDoc(doc(db, "users", params.referrerId));
   const referrerTier: TierName = referrerSnap.exists()
@@ -720,12 +1026,24 @@ export async function awardReferralCoins(params: {
     amount: coins,
     type: "referral",
     relatedBookingId: params.relatedBookingId,
-    reason: `Referral reward (${params.referralType}): referred client completed travel`,
+    reason: `Referral reward (${params.referralType})${fraction < 1 ? ` — ${Math.round(fraction * 100)}% completed` : ""}: referred client completed travel`,
     tierAtTime: referrerTier,
-    multiplierApplied: 1,  // flat — no multiplier on referrals
+    multiplierApplied: 1, // flat — no tier multiplier on referral coins
     affectsTier: false,
     status: "active",
   });
+
+  // The referred trip counts as +1 trip toward the referrer's tier qualification.
+  const { setDoc: _setDoc, increment } = modules.firestore;
+  await _setDoc(
+    doc(db, "users", params.referrerId),
+    {
+      completedTripsThisYear: increment(1),
+      totalCompletedTrips: increment(1),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   await setDoc(referralRef, {
     referrerId: params.referrerId,
@@ -733,48 +1051,78 @@ export async function awardReferralCoins(params: {
     relatedBookingId: params.relatedBookingId,
     referralType: params.referralType,
     rewardAmount: coins,
+    partialFraction: fraction,
     status: "completed",
     awardedAt: serverTimestamp(),
   });
 
-  // Referral coins intentionally do NOT trigger evaluateAndUpgradeTier
-  logger.log("[awardReferralCoins] Referral coins awarded:", coins, "to", params.referrerId, "(no tier impact)");
+  // Evaluate tier because the referral added a trip toward qualification.
+  await evaluateAndUpgradeTier(params.referrerId);
+
+  logger.log(
+    "[awardReferralCoins] Referral coins awarded:", coins,
+    "to", params.referrerId,
+    "(+1 trip counted toward tier)"
+  );
 }
 
-// ── Coin redemption (FIFO) ────────────────────────────────────────────────────
+// ── Coin redemption (FIFO + threshold table) ──────────────────────────────────
 
 /**
- * Redeem coins using FIFO order (oldest active coins deducted first).
- * Validates against 30% cap and sufficient balance before writing.
+ * Redeem coins using the fixed threshold table with FIFO deduction.
+ *
+ * Rules:
+ *   - Requested coins must match a threshold exactly (100/250/500/1000/2000/3500).
+ *   - The discount is applied as a percentage of the Omnia service invoice value.
+ *   - Coins cannot be applied to flights, hotels, visa fees, or third-party charges.
+ *   - Unused coins above the threshold carry forward automatically.
+ *   - Oldest active coins are deducted first (FIFO).
+ *
+ * Returns the ETB discount amount to apply to the invoice.
  */
 export async function redeemCoins(params: {
   userId: string;
   coinsToRedeem: number;
-  omniaServiceFee: number;
+  omniaServiceInvoiceValue: number;
   relatedBookingId?: string;
   reason?: string;
-}): Promise<{ success: boolean; error?: string; etbValue: number }> {
+}): Promise<{ success: boolean; error?: string; etbDiscount: number; discountPercent: number }> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) throw new Error("Database not initialized");
 
-  const { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc } =
-    modules.firestore;
+  const {
+    doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc,
+  } = modules.firestore;
 
   const userSnap = await getDoc(doc(db, "users", params.userId));
-  if (!userSnap.exists()) return { success: false, error: "User not found.", etbValue: 0 };
+  if (!userSnap.exists()) {
+    return { success: false, error: "User not found.", etbDiscount: 0, discountPercent: 0 };
+  }
   const userData = userSnap.data() as any;
   const balance: number = userData.loyaltyPoints ?? 0;
 
   const validation = validateRedemption({
     requestedCoins: params.coinsToRedeem,
     userBalance: balance,
-    omniaServiceFee: params.omniaServiceFee,
+    omniaServiceInvoiceValue: params.omniaServiceInvoiceValue,
   });
-  if (!validation.valid) {
-    return { success: false, error: validation.error, etbValue: 0 };
+  if (!validation.valid || !validation.threshold) {
+    return {
+      success: false,
+      error: validation.error,
+      etbDiscount: 0,
+      discountPercent: 0,
+    };
   }
 
+  const threshold = validation.threshold;
+  const etbDiscount = calculateRedemptionDiscount({
+    threshold,
+    omniaServiceInvoiceValue: params.omniaServiceInvoiceValue,
+  });
+
+  // FIFO deduction — mark oldest active transactions as reversed.
   const historySnap = await getDocs(
     query(
       collection(db, "users", params.userId, "coinsHistory"),
@@ -788,10 +1136,10 @@ export async function redeemCoins(params: {
 
   historySnap.forEach((d: any) => {
     if (remaining <= 0) return;
-    const data = d.data();
-    if (data.amount <= 0) return;
+    const txData = d.data();
+    if (txData.amount <= 0) return;
 
-    const available = data.amount as number;
+    const available = txData.amount as number;
     if (available <= remaining) {
       remaining -= available;
       updatePromises.push(
@@ -801,6 +1149,8 @@ export async function redeemCoins(params: {
         )
       );
     } else {
+      // Partial deduction — not supported by simple status flip;
+      // the balance deduction is handled by the redemption transaction below.
       remaining = 0;
     }
   });
@@ -812,16 +1162,46 @@ export async function redeemCoins(params: {
     amount: -params.coinsToRedeem,
     type: "redemption",
     relatedBookingId: params.relatedBookingId,
-    reason: params.reason ?? `Redeemed ${params.coinsToRedeem} coins against booking`,
+    reason:
+      params.reason ??
+      `Redeemed ${params.coinsToRedeem} coins — ${threshold.discountPercent}% discount (ETB ${etbDiscount.toLocaleString()} off)`,
     multiplierApplied: 1,
     tierAtTime: userData.tier ?? "Hope",
     affectsTier: false,
     status: "reversed",
   });
 
-  // 1 coin = 100 ETB (consistent with calculateBaseCoins rate)
-  const etbValue = params.coinsToRedeem * 100;
-  return { success: true, etbValue };
+  return { success: true, etbDiscount, discountPercent: threshold.discountPercent };
+}
+
+// ── Annual trip counter reset ─────────────────────────────────────────────────
+
+/**
+ * Reset the 12-month trip counter at the start of each membership year.
+ * Should be called by a scheduled Cloud Function on each user's membership
+ * anniversary date.
+ *
+ * Tier is NOT downgraded on reset — the previous tier remains active and
+ * a new qualification cycle begins.
+ */
+export async function resetAnnualTripCounter(userId: string): Promise<void> {
+  const db = await getFirebaseDb();
+  const modules = await getFirebaseModules();
+  if (!db || !modules.firestore) return;
+
+  const { doc, setDoc, serverTimestamp } = modules.firestore;
+
+  await setDoc(
+    doc(db, "users", userId),
+    {
+      completedTripsThisYear: 0,
+      membershipYearStartedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  logger.log("[resetAnnualTripCounter] Trip counter reset for:", userId);
 }
 
 // ── Coin expiry ───────────────────────────────────────────────────────────────
@@ -835,8 +1215,9 @@ export async function expireOldCoins(userId: string): Promise<number> {
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) return 0;
 
-  const { doc, collection, query, where, getDocs, updateDoc, serverTimestamp } =
-    modules.firestore;
+  const {
+    doc, collection, query, where, getDocs, updateDoc, serverTimestamp,
+  } = modules.firestore;
 
   const now = new Date().toISOString();
   let totalExpired = 0;
@@ -851,9 +1232,9 @@ export async function expireOldCoins(userId: string): Promise<number> {
 
     const updates: Promise<void>[] = [];
     snap.forEach((d: any) => {
-      const data = d.data();
-      if (data.expiresAt && data.expiresAt < now && data.amount > 0) {
-        totalExpired += data.amount as number;
+      const txData = d.data();
+      if (txData.expiresAt && txData.expiresAt < now && txData.amount > 0) {
+        totalExpired += txData.amount as number;
         updates.push(
           updateDoc(
             doc(db, "users", userId, "coinsHistory", d.id),
@@ -876,13 +1257,13 @@ export async function expireOldCoins(userId: string): Promise<number> {
       });
     }
   } catch {
-    // Silent — will retry next scheduled run
+    // Silent — will retry next scheduled run.
   }
 
   return totalExpired;
 }
 
-// ── Coin history query ────────────────────────────────────────────────────────
+// ── Coin history queries ──────────────────────────────────────────────────────
 
 export async function getUserCoinHistory(userId: string): Promise<CoinTransaction[]> {
   const db = await getFirebaseDb();
@@ -893,7 +1274,10 @@ export async function getUserCoinHistory(userId: string): Promise<CoinTransactio
 
   try {
     const snap = await getDocs(
-      query(collection(db, "users", userId, "coinsHistory"), orderBy("createdAt", "desc"))
+      query(
+        collection(db, "users", userId, "coinsHistory"),
+        orderBy("createdAt", "desc")
+      )
     );
     const txs: CoinTransaction[] = [];
     snap.forEach((d: any) => {
@@ -1030,15 +1414,12 @@ export async function adminAdjustCoins(params: {
     adminId: params.adminId,
     actionType: "manual_coin_adjustment",
     targetUserId: params.targetUserId,
-    details: {
-      amount: params.amount,
-      reason: params.reason,
-      type: txType,
-    },
+    details: { amount: params.amount, reason: params.reason, type: txType },
     createdAt: serverTimestamp(),
   });
 
-  await evaluateAndUpgradeTier(params.targetUserId);
+  // Coin adjustments do not change trip count, so no tier re-evaluation needed
+  // unless the admin also intends to change the tier (use adminSetTier for that).
 }
 
 export async function adminSetTier(params: {
@@ -1125,7 +1506,11 @@ export async function getAuditLogs(limitCount = 100): Promise<any[]> {
 
   try {
     const snap = await getDocs(
-      query(collection(db, "auditLogs"), orderBy("createdAt", "desc"), limit(limitCount))
+      query(
+        collection(db, "auditLogs"),
+        orderBy("createdAt", "desc"),
+        limit(limitCount)
+      )
     );
     const logs: any[] = [];
     snap.forEach((d: any) => logs.push({ id: d.id, ...d.data() }));

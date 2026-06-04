@@ -233,15 +233,7 @@ const highlights = [
 
 /* ────────────────────────────── Utility Components ─────────────────────────────────── */
 
-function FadeUp({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode
-  delay?: number
-  className?: string
-}) {
+function FadeUp({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true, margin: '-70px' })
   return (
@@ -254,14 +246,6 @@ function FadeUp({
     >
       {children}
     </motion.div>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[#10b981] text-xs font-bold tracking-[0.25em] uppercase mb-3">
-      {children}
-    </p>
   )
 }
 
@@ -280,19 +264,15 @@ export default function ZanzibarPage() {
   const barWidth = useTransform(pageProgress, [0, 1], ['0%', '100%'])
 
   return (
-    <div className="bg-[#050a0a] overflow-x-hidden">
-      {/* ─── Scroll Progress Bar ─── */}
+    <div className="bg-white overflow-x-hidden font-sans">
+      {/* Scroll Progress Bar */}
       <motion.div
         className="fixed top-0 left-0 h-[3px] z-[999] origin-left"
         style={{ width: barWidth, background: 'linear-gradient(90deg, #10b981, #06b6d4, #3b82f6)' }}
       />
 
       {/* ══════════════ HERO ══════════════ */}
-      <section
-        ref={heroRef}
-        className="relative h-screen min-h-[640px] flex items-center justify-center overflow-hidden"
-      >
-        {/* Parallax image */}
+      <section ref={heroRef} className="relative h-screen min-h-[640px] flex items-center justify-center overflow-hidden">
         <motion.div className="absolute inset-0" style={{ y: heroY, scale: heroScale }}>
           <Image
             src="https://images.unsplash.com/photo-1568322445389-f64ac2515020?w=1920&q=90"
@@ -302,31 +282,10 @@ export default function ZanzibarPage() {
             priority
           />
         </motion.div>
-
-        {/* Overlays */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/25 to-black/85" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/35 via-transparent to-black/35" />
 
-        {/* Teal ambient orbs */}
-        <motion.div
-          className="absolute top-[15%] right-[12%] w-80 h-80 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.14) 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.9, 0.5] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute bottom-[18%] left-[8%] w-[420px] h-[420px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.7, 0.4] }}
-          transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
-        />
-
-        {/* Hero Content */}
-        <motion.div
-          className="relative z-10 text-center px-4 max-w-5xl mx-auto"
-          style={{ opacity: heroOpacity }}
-        >
-          {/* Badge */}
+        <motion.div className="relative z-10 text-center px-4 max-w-5xl mx-auto" style={{ opacity: heroOpacity }}>
           <motion.div
             initial={{ opacity: 0, y: -24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -335,13 +294,10 @@ export default function ZanzibarPage() {
             style={{ background: 'rgba(16,185,129,0.13)' }}
           >
             <Star className="w-4 h-4 text-[#10b981] fill-[#10b981]" />
-            <span className="text-white/90 text-xs font-semibold tracking-[0.25em] uppercase">
-              Premium Island Experience
-            </span>
+            <span className="text-white/90 text-xs font-semibold tracking-[0.25em] uppercase">Premium Island Experience</span>
             <Star className="w-4 h-4 text-[#10b981] fill-[#10b981]" />
           </motion.div>
 
-          {/* Title */}
           <motion.h1
             initial={{ opacity: 0, y: 36 }}
             animate={{ opacity: 1, y: 0 }}
@@ -352,25 +308,17 @@ export default function ZanzibarPage() {
             Zanzibar
           </motion.h1>
 
-          {/* Subtitle divider */}
           <motion.div
             initial={{ opacity: 0, scaleX: 0 }}
             animate={{ opacity: 1, scaleX: 1 }}
             transition={{ duration: 0.65, delay: 0.75 }}
             className="flex items-center justify-center gap-3 mb-5"
           >
-            <div
-              className="h-px flex-1 max-w-[100px]"
-              style={{ background: 'linear-gradient(to right, transparent, rgba(16,185,129,0.75))' }}
-            />
+            <div className="h-px flex-1 max-w-[100px]" style={{ background: 'linear-gradient(to right, transparent, rgba(16,185,129,0.75))' }} />
             <span className="text-[#10b981] text-xs font-bold tracking-[0.32em] uppercase">Tanzania</span>
-            <div
-              className="h-px flex-1 max-w-[100px]"
-              style={{ background: 'linear-gradient(to left, transparent, rgba(16,185,129,0.75))' }}
-            />
+            <div className="h-px flex-1 max-w-[100px]" style={{ background: 'linear-gradient(to left, transparent, rgba(16,185,129,0.75))' }} />
           </motion.div>
 
-          {/* Tagline */}
           <motion.p
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
@@ -380,7 +328,6 @@ export default function ZanzibarPage() {
             5 Days Luxury Island Escape
           </motion.p>
 
-          {/* Glassmorphism info pills */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -388,17 +335,12 @@ export default function ZanzibarPage() {
             className="flex flex-wrap justify-center gap-3 mt-9"
           >
             {['4 Nights', 'Private Tours', 'Airport Transfers', '4-Star Hotels'].map((item, i) => (
-              <span
-                key={i}
-                className="px-4 py-2 rounded-full text-sm font-medium text-white/90 border border-white/15 backdrop-blur-md"
-                style={{ background: 'rgba(255,255,255,0.07)' }}
-              >
+              <span key={i} className="px-4 py-2 rounded-full text-sm font-medium text-white/90 border border-white/15 backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.07)' }}>
                 {item}
               </span>
             ))}
           </motion.div>
 
-          {/* Scroll cue */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -406,11 +348,7 @@ export default function ZanzibarPage() {
             className="absolute bottom-[-175px] left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
           >
             <span className="text-white/40 text-[10px] tracking-[0.25em] uppercase">Scroll to explore</span>
-            <motion.div
-              animate={{ y: [0, 9, 0] }}
-              transition={{ duration: 1.6, repeat: Infinity }}
-              className="w-6 h-10 rounded-full border border-white/25 flex items-start justify-center pt-2"
-            >
+            <motion.div animate={{ y: [0, 9, 0] }} transition={{ duration: 1.6, repeat: Infinity }} className="w-6 h-10 rounded-full border border-white/25 flex items-start justify-center pt-2">
               <div className="w-1 h-2 bg-white/55 rounded-full" />
             </motion.div>
           </motion.div>
@@ -418,40 +356,28 @@ export default function ZanzibarPage() {
       </section>
 
       {/* ══════════════ QUICK INFO CARDS ══════════════ */}
-      <section className="py-20 bg-gradient-to-b from-[#050a0a] to-[#0a1210]">
+      <section className="py-20 bg-white">
         <div className="container mx-auto px-4 lg:px-8">
           <FadeUp>
             <div className="text-center mb-14">
-              <SectionLabel>The Details</SectionLabel>
-              <h2 className="text-3xl lg:text-5xl font-bold text-white">Your Escape at a Glance</h2>
+              <p className="text-[#10b981] text-sm font-semibold tracking-widest uppercase mb-3">The Details</p>
+              <h2 className="text-3xl lg:text-5xl font-bold text-gray-900">Your Escape at a Glance</h2>
             </div>
           </FadeUp>
-
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {quickInfoCards.map((card, i) => (
               <FadeUp key={i} delay={i * 0.08}>
                 <motion.div
-                  whileHover={{ y: -9, scale: 1.05 }}
+                  whileHover={{ y: -6, scale: 1.03 }}
                   transition={{ duration: 0.25 }}
-                  className="group relative rounded-2xl p-5 text-center cursor-default overflow-hidden border border-white/5"
-                  style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(12px)' }}
+                  className="group relative rounded-2xl p-5 text-center cursor-default overflow-hidden border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow duration-300"
                 >
-                  {/* Glow bg */}
-                  <div
-                    className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{
-                      background: `radial-gradient(circle at center, ${card.color}15, transparent 70%)`,
-                      boxShadow: `0 0 40px ${card.color}25`,
-                    }}
-                  />
-                  <div
-                    className="relative w-11 h-11 mx-auto mb-3 rounded-xl flex items-center justify-center"
-                    style={{ background: `${card.color}1e` }}
-                  >
+                  <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: `radial-gradient(circle at center, ${card.color}08, transparent 70%)` }} />
+                  <div className="relative w-11 h-11 mx-auto mb-3 rounded-xl flex items-center justify-center" style={{ background: `${card.color}15` }}>
                     <card.icon className="w-5 h-5" style={{ color: card.color }} />
                   </div>
-                  <p className="relative text-white font-bold text-sm leading-tight">{card.label}</p>
-                  <p className="relative text-white/45 text-xs mt-1">{card.sub}</p>
+                  <p className="relative text-gray-900 font-bold text-sm leading-tight">{card.label}</p>
+                  <p className="relative text-gray-400 text-xs mt-1">{card.sub}</p>
                 </motion.div>
               </FadeUp>
             ))}
@@ -459,16 +385,14 @@ export default function ZanzibarPage() {
         </div>
       </section>
 
-      {/* ══════════════ QUICK EXPERIENCE CARDS ══════════════ */}
-      <section className="py-24 bg-[#06100d]">
+      {/* ══════════════ EXPERIENCE CARDS ══════════════ */}
+      <section className="py-24 bg-gray-50">
         <div className="container mx-auto px-4 lg:px-8">
           <FadeUp>
             <div className="text-center mb-16">
-              <SectionLabel>Curated Moments</SectionLabel>
-              <h2 className="text-3xl lg:text-5xl font-bold text-white mb-4">6 Unforgettable Experiences</h2>
-              <p className="text-white/45 max-w-2xl mx-auto text-base">
-                Each experience handpicked to give you the full soul of Zanzibar
-              </p>
+              <p className="text-[#10b981] text-sm font-semibold tracking-widest uppercase mb-3">Curated Moments</p>
+              <h2 className="text-3xl lg:text-5xl font-bold text-gray-900 mb-4">6 Unforgettable Experiences</h2>
+              <p className="text-gray-500 max-w-2xl mx-auto">Each experience handpicked to give you the full soul of Zanzibar</p>
             </div>
           </FadeUp>
 
@@ -476,54 +400,27 @@ export default function ZanzibarPage() {
             {experienceCards.map((exp, i) => (
               <FadeUp key={i} delay={i * 0.08}>
                 <motion.div
-                  className="group relative rounded-2xl overflow-hidden aspect-[4/3] cursor-default"
+                  className="group relative rounded-2xl overflow-hidden aspect-[4/3] cursor-default shadow-md hover:shadow-xl transition-shadow duration-500"
                   whileHover={{ y: -7 }}
                   transition={{ duration: 0.32 }}
                 >
-                  {/* Image with zoom */}
                   <div className="absolute inset-0">
                     <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-110">
                       <Image src={exp.image} alt={exp.title} fill className="object-cover" />
                     </div>
                   </div>
-
-                  {/* Overlays */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
-                  <div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{ background: `linear-gradient(to top, ${exp.color}55, transparent 60%)` }}
-                  />
-
-                  {/* Icon badge */}
-                  <div
-                    className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center border border-white/20 backdrop-blur-sm"
-                    style={{ background: 'rgba(0,0,0,0.45)' }}
-                  >
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: `linear-gradient(to top, ${exp.color}55, transparent 60%)` }} />
+                  <div className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center border border-white/20 backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.45)' }}>
                     <exp.icon className="w-4 h-4 text-white/80" />
                   </div>
-
-                  {/* Number badge */}
-                  <div
-                    className="absolute top-4 left-4 text-xs font-bold px-2 py-1 rounded-md"
-                    style={{ background: `${exp.color}cc`, color: '#fff' }}
-                  >
+                  <div className="absolute top-4 left-4 text-xs font-bold px-2 py-1 rounded-md" style={{ background: `${exp.color}cc`, color: '#fff' }}>
                     {String(i + 1).padStart(2, '0')}
                   </div>
-
-                  {/* Content */}
                   <div className="absolute bottom-0 left-0 right-0 p-5">
-                    <h3 className="text-white font-bold text-xl mb-2 group-hover:text-[#10b981] transition-colors duration-300">
-                      {exp.title}
-                    </h3>
-                    <p className="text-white/0 group-hover:text-white/80 text-sm leading-relaxed transition-all duration-500 translate-y-3 group-hover:translate-y-0">
-                      {exp.description}
-                    </p>
+                    <h3 className="text-white font-bold text-xl mb-2 group-hover:text-[#10b981] transition-colors duration-300">{exp.title}</h3>
+                    <p className="text-white/0 group-hover:text-white/80 text-sm leading-relaxed transition-all duration-500 translate-y-3 group-hover:translate-y-0">{exp.description}</p>
                   </div>
-
-                  {/* Border glow on hover */}
-                  <div
-                    className="absolute inset-0 rounded-2xl border border-transparent group-hover:border-white/20 transition-colors duration-400"
-                  />
                 </motion.div>
               </FadeUp>
             ))}
@@ -531,395 +428,175 @@ export default function ZanzibarPage() {
         </div>
       </section>
 
-      {/* ══════════════ INTERACTIVE ITINERARY TIMELINE ══════════════ */}
-      <section className="py-24 bg-[#050a0a]">
-        <div className="container mx-auto px-4 lg:px-8 max-w-5xl">
+      {/* ══════════════ ITINERARY ══════════════ */}
+      <section className="py-24 bg-white">
+        <div className="container mx-auto px-4 lg:px-8 max-w-4xl">
           <FadeUp>
             <div className="text-center mb-16">
-              <SectionLabel>Day by Day</SectionLabel>
-              <h2 className="text-3xl lg:text-5xl font-bold text-white mb-4">Your Zanzibar Itinerary</h2>
-              <p className="text-white/45 max-w-xl mx-auto">
-                5 extraordinary days crafted to immerse you in the magic of the Spice Island
-              </p>
+              <p className="text-[#10b981] text-xs font-semibold tracking-[0.3em] uppercase mb-3">Day by Day</p>
+              <h2 className="text-3xl lg:text-5xl font-bold text-gray-900 mb-4">Your Zanzibar Itinerary</h2>
+              <div className="w-20 h-1 bg-gradient-to-r from-[#10b981] to-[#06b6d4] mx-auto rounded-full" />
+              <p className="text-gray-500 max-w-xl mx-auto mt-4">5 extraordinary days crafted to immerse you in the magic of the Spice Island</p>
             </div>
           </FadeUp>
 
-          <div className="relative">
-            {/* Vertical spine */}
-            <div className="absolute left-6 lg:left-8 top-0 bottom-0 w-px bg-gradient-to-b from-[#10b981]/70 via-[#06b6d4]/40 to-transparent" />
+          <div className="space-y-3">
+            {itinerary.map((item, i) => {
+              const isOpen = openDay === i
+              return (
+                <FadeUp key={i} delay={i * 0.06}>
+                  <motion.div
+                    layout
+                    className="rounded-2xl overflow-hidden border bg-white transition-shadow duration-300"
+                    style={{
+                      borderColor: isOpen ? `${item.color}40` : '#e5e7eb',
+                      boxShadow: isOpen ? `0 4px 24px ${item.color}15` : '0 1px 4px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <button onClick={() => setOpenDay(isOpen ? null : i)} className="w-full text-left">
+                      <div className="flex items-center p-5 lg:p-6 gap-4">
+                        <span
+                          className="shrink-0 text-xs font-bold tracking-widest uppercase px-3 py-1 rounded-full"
+                          style={{ background: `${item.color}12`, color: item.color }}
+                        >
+                          {item.day}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-gray-900 font-semibold text-base lg:text-lg leading-snug">{item.title}</h3>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                            <span className="text-gray-400 text-xs">{item.time}</span>
+                          </div>
+                        </div>
+                        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.3 }} className="shrink-0 ml-3">
+                          <div className="w-8 h-8 rounded-full border flex items-center justify-center" style={{ background: isOpen ? `${item.color}12` : '#f9fafb', borderColor: isOpen ? `${item.color}40` : '#e5e7eb' }}>
+                            <ChevronDown className="w-4 h-4" style={{ color: isOpen ? item.color : '#9ca3af' }} />
+                          </div>
+                        </motion.div>
+                      </div>
+                    </button>
 
-            <div className="space-y-4">
-              {itinerary.map((item, i) => {
-                const isOpen = openDay === i
-                return (
-                  <FadeUp key={i} delay={i * 0.06}>
-                    <div className="relative pl-16 lg:pl-20">
-                      {/* Timeline dot */}
-                      <motion.div
-                        className="absolute left-[10px] lg:left-[14px] top-6 w-7 h-7 rounded-full border-2 flex items-center justify-center z-10"
-                        style={{
-                          borderColor: item.color,
-                          background: isOpen ? item.color : '#050a0a',
-                        }}
-                        animate={{ scale: isOpen ? 1.2 : 1 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <item.icon
-                          className="w-3 h-3"
-                          style={{ color: isOpen ? '#000' : item.color }}
-                        />
-                      </motion.div>
-
-                      {/* Card */}
-                      <motion.div
-                        className="rounded-2xl overflow-hidden border cursor-pointer"
-                        style={{
-                          background: isOpen
-                            ? `${item.color}08`
-                            : 'rgba(255,255,255,0.025)',
-                          borderColor: isOpen
-                            ? `${item.color}45`
-                            : 'rgba(255,255,255,0.06)',
-                        }}
-                        whileHover={{ borderColor: `${item.color}30` }}
-                        onClick={() => setOpenDay(isOpen ? null : i)}
-                      >
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-5 lg:p-6">
-                          <div className="flex items-center gap-4 min-w-0">
-                            <span
-                              className="shrink-0 text-xs font-bold tracking-widest uppercase px-3 py-1 rounded-full"
-                              style={{ background: `${item.color}20`, color: item.color }}
-                            >
-                              {item.day}
-                            </span>
-                            <div className="min-w-0">
-                              <h3 className="text-white font-semibold text-base lg:text-lg leading-snug truncate">
-                                {item.title}
-                              </h3>
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <Clock className="w-3 h-3 text-white/35 shrink-0" />
-                                <span className="text-white/40 text-xs">{item.time}</span>
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <div className="px-5 lg:px-6 pb-6 pt-2 bg-gray-50 border-t border-gray-100 grid md:grid-cols-2 gap-6">
+                            <div>
+                              <ul className="space-y-2 mb-4">
+                                {item.services.map((svc, si) => (
+                                  <li key={si} className="flex items-start gap-3">
+                                    <Check className="w-4 h-4 shrink-0 mt-0.5" style={{ color: item.color }} />
+                                    <span className="text-gray-600 text-sm leading-relaxed">{svc}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              <div className="flex items-start gap-3 p-3 rounded-xl" style={{ background: `${item.color}10`, border: `1px solid ${item.color}25` }}>
+                                <Star className="w-4 h-4 shrink-0 mt-0.5 fill-current" style={{ color: item.color }} />
+                                <p className="text-sm font-medium" style={{ color: item.color }}>{item.highlight}</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2 mt-4">
+                                {item.tags.map((tag, ti) => (
+                                  <span key={ti} className="text-xs px-3 py-1 rounded-full bg-white text-gray-500 border border-gray-200">{tag}</span>
+                                ))}
                               </div>
                             </div>
+                            <div className="relative h-48 md:h-auto rounded-xl overflow-hidden">
+                              <Image src={item.image} alt={item.title} fill className="object-cover" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                            </div>
                           </div>
-                          <motion.div
-                            animate={{ rotate: isOpen ? 180 : 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="shrink-0 ml-3"
-                          >
-                            <ChevronDown className="w-5 h-5 text-white/35" />
-                          </motion.div>
-                        </div>
-
-                        {/* Expanded */}
-                        <AnimatePresence initial={false}>
-                          {isOpen && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                            >
-                              <div className="px-5 lg:px-6 pb-6 grid md:grid-cols-2 gap-6">
-                                {/* Left: services + highlight */}
-                                <div>
-                                  <ul className="space-y-2 mb-4">
-                                    {item.services.map((svc, si) => (
-                                      <li key={si} className="flex items-start gap-3">
-                                        <Check
-                                          className="w-4 h-4 shrink-0 mt-0.5"
-                                          style={{ color: item.color }}
-                                        />
-                                        <span className="text-white/70 text-sm leading-relaxed">
-                                          {svc}
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-
-                                  {/* Highlight badge */}
-                                  <div
-                                    className="flex items-start gap-3 p-3 rounded-xl"
-                                    style={{
-                                      background: `${item.color}10`,
-                                      border: `1px solid ${item.color}25`,
-                                    }}
-                                  >
-                                    <Star
-                                      className="w-4 h-4 shrink-0 mt-0.5 fill-current"
-                                      style={{ color: item.color }}
-                                    />
-                                    <p
-                                      className="text-sm font-medium"
-                                      style={{ color: item.color }}
-                                    >
-                                      {item.highlight}
-                                    </p>
-                                  </div>
-
-                                  {/* Tags */}
-                                  <div className="flex flex-wrap gap-2 mt-4">
-                                    {item.tags.map((tag, ti) => (
-                                      <span
-                                        key={ti}
-                                        className="text-xs px-3 py-1 rounded-full text-white/55"
-                                        style={{ background: 'rgba(255,255,255,0.06)' }}
-                                      >
-                                        {tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                {/* Right: image */}
-                                <div className="relative h-48 md:h-auto rounded-xl overflow-hidden">
-                                  <Image
-                                    src={item.image}
-                                    alt={item.title}
-                                    fill
-                                    className="object-cover"
-                                  />
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    </div>
-                  </FadeUp>
-                )
-              })}
-            </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </FadeUp>
+              )
+            })}
           </div>
         </div>
       </section>
 
       {/* ══════════════ INCLUDED / EXCLUDED ══════════════ */}
-      <section className="py-24 bg-[#06100d]">
+      <section className="py-24 bg-gray-50">
         <div className="container mx-auto px-4 lg:px-8 max-w-4xl">
           <FadeUp>
             <div className="text-center mb-14">
-              <SectionLabel>What's Covered</SectionLabel>
-              <h2 className="text-3xl lg:text-5xl font-bold text-white mb-4">Included &amp; Excluded</h2>
-              <p className="text-white/45 max-w-xl mx-auto">
-                Complete transparency — know exactly what your luxury package covers
-              </p>
+              <p className="text-[#10b981] text-sm font-semibold tracking-widest uppercase mb-3">What's Covered</p>
+              <h2 className="text-3xl lg:text-5xl font-bold text-gray-900 mb-3">Included & Excluded</h2>
+              <p className="text-gray-500 max-w-xl mx-auto">Complete transparency — know exactly what your luxury package covers</p>
             </div>
           </FadeUp>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Included */}
             <FadeUp delay={0.1}>
-              <motion.div
-                className="rounded-2xl p-6 border h-full"
-                style={{
-                  background: 'rgba(16,185,129,0.05)',
-                  borderColor: 'rgba(16,185,129,0.2)',
-                }}
-                whileHover={{ borderColor: 'rgba(16,185,129,0.4)' }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="flex items-center gap-3 mb-5">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: 'rgba(16,185,129,0.18)' }}
-                  >
-                    <Check className="w-5 h-5 text-[#10b981]" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-lg">What's Included</h3>
-                    <p className="text-[#10b981] text-xs font-medium">All covered for you</p>
-                  </div>
+              <div className="bg-white border border-emerald-100 rounded-3xl p-8 h-full shadow-sm">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-5 bg-emerald-50 border border-emerald-100">
+                  <Check className="w-5 h-5 text-[#10b981]" />
                 </div>
-                <div className="h-px mb-5" style={{ background: 'rgba(16,185,129,0.15)' }} />
+                <h3 className="text-gray-900 font-bold text-xl mb-1">What's Included</h3>
+                <p className="text-[#10b981] text-xs font-medium mb-5">All covered for you</p>
+                <div className="h-px mb-5 bg-emerald-100" />
                 <ul className="space-y-3">
                   {included.map((item, i) => (
-                    <motion.li
-                      key={i}
-                      className="flex items-start gap-3"
-                      initial={{ opacity: 0, x: -12 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.06, duration: 0.4 }}
-                    >
+                    <motion.li key={i} className="flex items-start gap-3" initial={{ opacity: 0, x: -12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06, duration: 0.4 }}>
                       <Check className="w-4 h-4 text-[#10b981] shrink-0 mt-0.5" />
-                      <span className="text-white/75 text-sm leading-relaxed">{item}</span>
+                      <span className="text-gray-600 text-sm leading-relaxed">{item}</span>
                     </motion.li>
                   ))}
                 </ul>
-              </motion.div>
+              </div>
             </FadeUp>
 
-            {/* Excluded */}
             <FadeUp delay={0.2}>
-              <motion.div
-                className="rounded-2xl p-6 border h-full"
-                style={{
-                  background: 'rgba(239,68,68,0.04)',
-                  borderColor: 'rgba(239,68,68,0.15)',
-                }}
-                whileHover={{ borderColor: 'rgba(239,68,68,0.35)' }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="flex items-center gap-3 mb-5">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ background: 'rgba(239,68,68,0.15)' }}
-                  >
-                    <X className="w-5 h-5 text-[#ef4444]" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-lg">Not Included</h3>
-                    <p className="text-[#ef4444] text-xs font-medium">Plan for these extras</p>
-                  </div>
+              <div className="bg-white border border-rose-100 rounded-3xl p-8 h-full shadow-sm">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-5 bg-rose-50 border border-rose-100">
+                  <X className="w-5 h-5 text-[#ef4444]" />
                 </div>
-                <div className="h-px mb-5" style={{ background: 'rgba(239,68,68,0.12)' }} />
+                <h3 className="text-gray-900 font-bold text-xl mb-1">Not Included</h3>
+                <p className="text-[#ef4444] text-xs font-medium mb-5">Plan for these extras</p>
+                <div className="h-px mb-5 bg-rose-100" />
                 <ul className="space-y-3">
                   {excluded.map((item, i) => (
-                    <motion.li
-                      key={i}
-                      className="flex items-start gap-3"
-                      initial={{ opacity: 0, x: -12 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.08, duration: 0.4 }}
-                    >
+                    <motion.li key={i} className="flex items-start gap-3" initial={{ opacity: 0, x: -12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08, duration: 0.4 }}>
                       <X className="w-4 h-4 text-[#ef4444] shrink-0 mt-0.5" />
-                      <span className="text-white/65 text-sm leading-relaxed">{item}</span>
+                      <span className="text-gray-600 text-sm leading-relaxed">{item}</span>
                     </motion.li>
                   ))}
                 </ul>
-
-                {/* Tip */}
-                <div
-                  className="mt-5 p-3 rounded-xl"
-                  style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}
-                >
-                  <p className="text-white/55 text-xs leading-relaxed">
-                    💡 We recommend purchasing travel insurance before departure. Our team can advise on suitable providers.
+                <div className="mt-5 p-3 rounded-xl bg-rose-50 border border-rose-100">
+                  <p className="text-gray-500 text-xs leading-relaxed">
+                    💡 Travel insurance is strongly recommended. OMNIA can assist with recommendations — ask your travel advisor.
                   </p>
                 </div>
-              </motion.div>
+              </div>
             </FadeUp>
           </div>
         </div>
       </section>
 
-      {/* ══════════════ DESTINATION HIGHLIGHTS ══════════════ */}
-      <section className="py-24 bg-[#050a0a]">
-        <div className="container mx-auto px-4 lg:px-8">
-          <FadeUp>
-            <div className="text-center mb-16">
-              <SectionLabel>Must-See</SectionLabel>
-              <h2 className="text-3xl lg:text-5xl font-bold text-white mb-4">Destination Highlights</h2>
-              <p className="text-white/45 max-w-2xl mx-auto">
-                Six iconic locations that define the Zanzibar experience
-              </p>
-            </div>
-          </FadeUp>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {highlights.map((h, i) => (
-              <FadeUp key={i} delay={i * 0.07}>
-                <motion.div
-                  className="group relative rounded-2xl overflow-hidden aspect-[4/3] cursor-default"
-                  whileHover={{ y: -6, boxShadow: '0 24px 60px rgba(16,185,129,0.12)' }}
-                  transition={{ duration: 0.32 }}
-                >
-                  {/* Image zoom */}
-                  <div className="absolute inset-0">
-                    <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-110">
-                      <Image src={h.image} alt={h.title} fill className="object-cover" />
-                    </div>
-                  </div>
-
-                  {/* Overlays */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{ background: 'linear-gradient(to top, rgba(16,185,129,0.35), transparent 60%)' }}
-                  />
-
-                  {/* Icon */}
-                  <div
-                    className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center border border-white/20 backdrop-blur-sm"
-                    style={{ background: 'rgba(0,0,0,0.4)' }}
-                  >
-                    <h.icon className="w-4 h-4 text-white/80" />
-                  </div>
-
-                  {/* Content */}
-                  <div className="absolute bottom-0 left-0 right-0 p-5">
-                    <h3 className="text-white font-bold text-lg mb-2 group-hover:text-[#10b981] transition-colors duration-300">
-                      {h.title}
-                    </h3>
-                    <p className="text-white/0 group-hover:text-white/75 text-sm leading-relaxed transition-all duration-500 translate-y-3 group-hover:translate-y-0">
-                      {h.description}
-                    </p>
-                  </div>
-                </motion.div>
-              </FadeUp>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════ CLOSING BANNER ══════════════ */}
+      {/* ══════════════ CLOSING CTA ══════════════ */}
       <section className="relative py-32 overflow-hidden">
         <div className="absolute inset-0">
-          <Image
-            src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=85"
-            alt="Zanzibar beach"
-            fill
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-black/72" />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, transparent 50%, rgba(6,182,212,0.09) 100%)',
-            }}
-          />
+          <Image src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=85" alt="Zanzibar Beach" fill className="object-cover" />
+          <div className="absolute inset-0 bg-black/65" />
         </div>
-
         <FadeUp>
           <div className="relative z-10 text-center px-4 max-w-3xl mx-auto">
-            <motion.div
-              className="inline-block mb-6"
-              animate={{ rotate: [0, 6, -6, 0] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <span className="text-5xl">🌊</span>
-            </motion.div>
-            <h2 className="text-4xl lg:text-6xl font-bold text-white mb-5 leading-tight">
-              Zanzibar Awaits<br />
-              <span style={{ color: '#10b981' }}>Your Paradise</span>
+            <h2 className="text-4xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+              Begin Your<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10b981] to-[#06b6d4]">Zanzibar Escape</span>
             </h2>
-            <p className="text-white/65 text-lg leading-relaxed mb-9">
-              From the powder-white shores of Mnemba to the ancient streets of Stone Town — every
-              breath of Zanzibar air carries five centuries of magic.
+            <p className="text-white/70 text-lg leading-relaxed mb-10 max-w-xl mx-auto">
+              Pristine beaches, wild dolphins, spice-scented air, and the magic of Stone Town — all crafted to perfection.
             </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {['Ocean', 'Culture', 'Wildlife', 'Spices', 'History', 'Luxury'].map((tag, i) => (
-                <motion.span
-                  key={i}
-                  className="px-5 py-2 rounded-full text-sm font-medium border border-white/18 text-white/75 backdrop-blur-sm"
-                  style={{ background: 'rgba(255,255,255,0.05)' }}
-                  whileHover={{ scale: 1.06, borderColor: 'rgba(16,185,129,0.5)', color: '#10b981' }}
-                  transition={{ duration: 0.18 }}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                    transition: { delay: i * 0.09, duration: 0.55 },
-                  }}
-                >
-                  {tag}
-                </motion.span>
-              ))}
-            </div>
+            <button className="px-10 py-4 bg-[#10b981] text-white font-bold rounded-full text-sm tracking-wide hover:bg-[#059669] hover:scale-105 transition-all duration-300 shadow-lg">
+              Start Planning
+            </button>
           </div>
         </FadeUp>
       </section>

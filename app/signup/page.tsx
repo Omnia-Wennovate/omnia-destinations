@@ -210,16 +210,9 @@ const onSubmit = async (data: SignupFormData) => {
       localStorage.removeItem('refCode')
     }
 
-    // Award 1,000 welcome bonus coins (server-side via Admin SDK — bypasses Firestore rules)
-    try {
-      await fetch('/api/user/welcome-bonus', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: firebaseUser.uid }),
-      })
-    } catch (e) {
-      console.error('[welcome-bonus] API call failed (non-fatal):', e)
-    }
+    // NOTE: Welcome bonus coins are NOT awarded at signup.
+    // Per the Omnia Loyalty Program, 100 welcome coins are awarded
+    // on the user's FIRST completed booking via awardWelcomeBonusAdmin().
 
     await signOut(auth)
 

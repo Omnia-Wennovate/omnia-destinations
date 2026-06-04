@@ -18,10 +18,10 @@ const destinations = [
     href: '/destinations/south-africa',
   },
   {
-    name: 'Singapore',
-    image: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&q=80',
+    name: 'Madagascar',
+    image: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=800&q=80',
     tourCount: 1,
-    href: '/destinations/singapore',
+    href: '/destinations/madagascar',
   },
   {
     name: 'Seychelles',
@@ -37,10 +37,10 @@ const destinations = [
     href: '/destinations/kenya',
   },
   {
-    name: 'Rome',
-    image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&q=80',
+    name: 'Vietnam',
+    image: 'https://images.unsplash.com/photo-1528127269322-539801943592?w=800&q=80',
     tourCount: 1,
-    href: '/destinations/rome',
+    href: '/destinations/vietnam',
   },
   {
     name: 'Bali',
@@ -49,10 +49,10 @@ const destinations = [
     href: '/destinations/bali',
   },
   {
-    name: 'India',
-    image: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=800&q=80',
+    name: 'Japan',
+    image: 'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800&q=80',
     tourCount: 1,
-    href: '/destinations/india',
+    href: '/destinations/japan',
   },
 ]
 

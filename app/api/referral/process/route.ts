@@ -1,21 +1,29 @@
-/**
- * POST /api/referral/process
- *
- * Called immediately after a new user is created.
- * Uses Admin SDK (bypasses Firestore security rules) to:
- *   1. Find the referrer by referralCode
- *   2. Increment their totalReferrals
- *   3. Save referredBy on the new user's document
- *   4. Award referral signup coins (500) to the referrer immediately
- *
- * Idempotent — safe to retry.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { awardReferralCoinsAdmin } from "@/lib/services/loyalty.admin";
 
+/**
+ * POST /api/process-referral
+ *
+ * Called when a new user signs up with a referral code.
+ *
+ * Per the Omnia Loyalty Program rules:
+ *   - Referral coins are NOT awarded at signup.
+ *   - Coins are awarded ONLY after the referred person's trip is fully
+ *     completed (individual: 150 coins, group: 350 coins, corporate: 600 coins).
+ *   - This route only records `referredBy` on the new user document so that
+ *     the booking-completion flow can look it up and award coins at that point.
+ *
+ * What this route does:
+ *   1. Validate the referral code and find the referrer.
+ *   2. Guard against self-referrals.
+ *   3. Atomically save `referredBy` on the new user + increment `totalReferrals`
+ *      on the referrer.
+ *
+ * What this route does NOT do:
+ *   - Award any coins (that happens in the booking-completion flow).
+ *   - Count a trip toward the referrer's tier (that also happens at completion).
+ */
 export async function POST(req: NextRequest) {
   try {
     const { referralCode, newUserId } = await req.json();
@@ -54,63 +62,49 @@ export async function POST(req: NextRequest) {
     const newUserRef = db.collection("users").doc(newUserId);
     const newUserSnap = await newUserRef.get();
     if (!newUserSnap.exists) {
-      return NextResponse.json({ error: "New user document not found" }, { status: 404 });
-    }
-
-    // ── 4. Check if referredBy already set ───────────────────────────────────
-    const existingReferredBy = newUserSnap.data()?.referredBy;
-    let effectiveReferrerId = referrerId;
-
-    if (existingReferredBy) {
-      // referredBy already saved — skip batch write but STILL award coins below
-      // (coins have their own idempotency via referrals/{key} guard doc)
-      console.log(`[process-referral] referredBy already set for user: ${newUserId}, skipping batch write`);
-      effectiveReferrerId = existingReferredBy;
-    } else {
-      // ── 5. Atomic batch write ──────────────────────────────────────────────
-      const batch = db.batch();
-
-      // Save referredBy on new user
-      batch.update(newUserRef, {
-        referredBy: referrerId,
-        referralCodeUsed: referralCode.trim().toUpperCase(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      // Increment referrer's totalReferrals
-      batch.update(referrerDoc.ref, {
-        totalReferrals: FieldValue.increment(1),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
-
-      console.log(
-        `[process-referral] ✅ referredBy=${referrerId} set for user=${newUserId}, totalReferrals incremented`
+      return NextResponse.json(
+        { error: "New user document not found" },
+        { status: 404 }
       );
     }
 
-    // ── 6. Award referral signup coins immediately ───────────────────────────
-    //    Uses existing awardReferralCoinsAdmin with referralType="signup"
-    //    Idempotency key: `${effectiveReferrerId}_${newUserId}_signup`
-    //    ONE-TIME reward — safe to retry (checked inside awardReferralCoinsAdmin)
-    console.log("[process-referral] Referral signup detected");
-    console.log("[process-referral] Referrer ID:", effectiveReferrerId);
-
-    try {
-      await awardReferralCoinsAdmin({
-        referrerId: effectiveReferrerId,
-        referredUserId: newUserId,
-        referralType: "signup",
-        // No relatedBookingId — this is a signup reward, not booking-based
+    // ── 4. Idempotency — skip if referredBy already set ──────────────────────
+    const existingReferredBy = newUserSnap.data()?.referredBy;
+    if (existingReferredBy) {
+      console.log(
+        `[process-referral] referredBy already set for user: ${newUserId} → referrer: ${existingReferredBy}`
+      );
+      return NextResponse.json({
+        success: true,
+        referrerId: existingReferredBy,
+        note: "already_recorded",
       });
-      console.log("[process-referral] Referral signup reward granted");
-    } catch (err) {
-      // Non-fatal — referredBy is already saved, coins can be retried
-      console.error("[process-referral] Referral signup reward failed (non-fatal):", err);
     }
 
-    return NextResponse.json({ success: true, referrerId: effectiveReferrerId });
+    // ── 5. Atomic batch write ─────────────────────────────────────────────────
+    //    Save referredBy on the new user and increment the referrer's counter.
+    //    No coins are awarded here — coins come only after a completed trip.
+    const batch = db.batch();
+
+    batch.update(newUserRef, {
+      referredBy: referrerId,
+      referralCodeUsed: referralCode.trim().toUpperCase(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    batch.update(referrerDoc.ref, {
+      totalReferrals: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    console.log(
+      `[process-referral] ✅ referredBy=${referrerId} saved for user=${newUserId}` +
+      ` — coins will be awarded when the referred person completes a trip`
+    );
+
+    return NextResponse.json({ success: true, referrerId });
   } catch (error: any) {
     console.error("[process-referral] Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
