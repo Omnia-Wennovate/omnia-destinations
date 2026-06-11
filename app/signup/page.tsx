@@ -210,9 +210,17 @@ const onSubmit = async (data: SignupFormData) => {
       localStorage.removeItem('refCode')
     }
 
-    // NOTE: Welcome bonus coins are NOT awarded at signup.
-    // Per the Omnia Loyalty Program, 100 welcome coins are awarded
-    // on the user's FIRST completed booking via awardWelcomeBonusAdmin().
+    // ── Award 100 welcome bonus coins at signup (server-side, idempotent) ──
+    try {
+      await fetch('/api/auth/welcome-bonus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: firebaseUser.uid }),
+      })
+      console.log('[signup] Welcome bonus awarded')
+    } catch (e) {
+      console.error('[signup] Welcome bonus API failed (non-fatal):', e)
+    }
 
     await signOut(auth)
 
@@ -227,7 +235,16 @@ const onSubmit = async (data: SignupFormData) => {
     if (process.env.NODE_ENV === 'development') {
       console.log('Signup error:', error)
     }
-    setFormError(error?.message || 'Signup failed. Please try again.')
+    const firebaseErrorMessages: Record<string, string> = {
+      'auth/email-already-in-use': 'An account with this email already exists. Please sign in instead.',
+      'auth/invalid-email': 'The email address is not valid.',
+      'auth/weak-password': 'Password is too weak. Please choose a stronger password.',
+      'auth/operation-not-allowed': 'Email/password sign-up is not enabled. Please contact support.',
+      'auth/network-request-failed': 'Network error. Please check your connection and try again.',
+      'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
+    }
+    const friendlyMessage = error?.code ? firebaseErrorMessages[error.code] : null
+    setFormError(friendlyMessage || error?.message || 'Signup failed. Please try again.')
   } finally {
     setLoading(false)
   }

@@ -167,10 +167,12 @@ async function writeCoinTransactionAdmin(params: {
  * Idempotent — checks for an existing welcome_bonus transaction first.
  * Called inside awardBookingCoinsAdmin before awarding booking coins.
  */
-async function awardWelcomeBonusAdmin(
+export async function awardWelcomeBonusAdmin(
   userId: string,
   tx?: FirebaseFirestore.Transaction
 ): Promise<boolean> {
+  console.log("[awardWelcomeBonusAdmin] Welcome bonus check started for userId:", userId);
+
   const db = getAdminDb();
 
   const existingSnap = await db
@@ -182,9 +184,11 @@ async function awardWelcomeBonusAdmin(
     .get();
 
   if (!existingSnap.empty) {
-    console.log("[awardWelcomeBonusAdmin] Already awarded for:", userId);
+    console.log("[awardWelcomeBonusAdmin] Welcome bonus skipped — already awarded for:", userId);
     return false;
   }
+
+  console.log("[awardWelcomeBonusAdmin] Welcome bonus eligible for userId:", userId);
 
   const exp = new Date();
   exp.setMonth(exp.getMonth() + COINS_EXPIRY_MONTHS);
@@ -198,7 +202,7 @@ async function awardWelcomeBonusAdmin(
     relatedBookingId: null,
     multiplierApplied: 1,
     tierAtTime: "Hope" as TierName,
-    reason: "Welcome bonus — thank you for your first booking with Omnia!",
+    reason: "Welcome bonus — thank you for joining Omnia!",
     createdAt: FieldValue.serverTimestamp(),
     expiresAt: exp.toISOString(),
     status: "active",
@@ -212,38 +216,41 @@ async function awardWelcomeBonusAdmin(
   const loyaltyRef = db.collection("loyaltyTransactions").doc();
   const userRef = db.collection("users").doc(userId);
 
-  if (tx) {
-    tx.set(histRef, txData);
-    tx.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
-    tx.set(
-      userRef,
-      {
-        loyaltyPoints: FieldValue.increment(WELCOME_BONUS_COINS),
-        totalCoinsEarned: FieldValue.increment(WELCOME_BONUS_COINS),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } else {
-    const batch = db.batch();
-    batch.set(histRef, txData);
-    batch.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
-    batch.set(
-      userRef,
-      {
-        loyaltyPoints: FieldValue.increment(WELCOME_BONUS_COINS),
-        totalCoinsEarned: FieldValue.increment(WELCOME_BONUS_COINS),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    await batch.commit();
+  try {
+    if (tx) {
+      tx.set(histRef, txData);
+      tx.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
+      tx.set(
+        userRef,
+        {
+          loyaltyPoints: FieldValue.increment(WELCOME_BONUS_COINS),
+          totalCoinsEarned: FieldValue.increment(WELCOME_BONUS_COINS),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } else {
+      const batch = db.batch();
+      batch.set(histRef, txData);
+      batch.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
+      batch.set(
+        userRef,
+        {
+          loyaltyPoints: FieldValue.increment(WELCOME_BONUS_COINS),
+          totalCoinsEarned: FieldValue.increment(WELCOME_BONUS_COINS),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await batch.commit();
+      console.log("[awardWelcomeBonusAdmin] Welcome bonus Firestore write success for userId:", userId);
+    }
+  } catch (err) {
+    console.error("[awardWelcomeBonusAdmin] Welcome bonus Firestore write failed for userId:", userId, err);
+    throw err;
   }
 
-  console.log(
-    "[awardWelcomeBonusAdmin] 100 welcome coins awarded to:",
-    userId
-  );
+  console.log("[awardWelcomeBonusAdmin] Welcome bonus awarded —", WELCOME_BONUS_COINS, "coins → userId:", userId);
   return true;
 }
 
@@ -284,6 +291,13 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
     // ── Idempotency guard ──────────────────────────────────────────────────
     if (booking.coinsStatus === "awarded") {
       awardedUserId = booking.userId ?? null;
+      // FIX: Also read referredBy so welcome bonus + referral can be retried
+      // if they failed during the first run (e.g. transient Firestore error).
+      if (awardedUserId) {
+        const userSnap = await tx.get(db.collection("users").doc(awardedUserId));
+        const rb = userSnap.data()?.referredBy;
+        referredBy = (rb && rb !== "") ? rb : null;
+      }
       return;
     }
 
@@ -325,7 +339,8 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
     const userSnap = await tx.get(userRef);
     const userData = userSnap.data() ?? {};
     const currentTier: TierName = userData.tier ?? "Hope";
-    referredBy = userData.referredBy ?? null;
+    const rb = userData.referredBy;
+    referredBy = (rb && rb !== "") ? rb : null;
 
     // ── Calculate booking coins: 1 per ETB 1,000 × tier multiplier ────────
     const coins = calculateBookingCoins(invoiceValue, currentTier);
@@ -338,6 +353,7 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
       tier: currentTier,
       multiplier,
       coinsAwarded: coins,
+      referredBy,
     });
 
     const exp = new Date();
@@ -397,20 +413,31 @@ export async function awardBookingCoinsAdmin(bookingId: string): Promise<void> {
 
   if (!awardedUserId) return;
 
-  // ── Welcome bonus (outside transaction — has own idempotency check) ──────
+  // ── Welcome bonus ─────────────────────────────────────────────────────────
   // Awarded on first booking only. 100 coins, does not affect tier.
-  await awardWelcomeBonusAdmin(awardedUserId);
+  // Isolated try-catch: a failure here must NOT block referral or tier evaluation.
+  try {
+    await awardWelcomeBonusAdmin(awardedUserId);
+  } catch (err) {
+    console.error("[awardBookingCoinsAdmin] Welcome bonus failed (non-fatal — will not block referral/tier):", err);
+  }
 
-  // ── Referral coins (outside transaction — has own idempotency guard) ─────
-  // If this user was referred, award the referrer 150 coins now that a trip
-  // has been completed. Also counts as +1 trip toward the referrer's tier.
+  // ── Referral coins ────────────────────────────────────────────────────────
+  // Isolated try-catch: a failure here must NOT block tier evaluation.
+  console.log("[awardBookingCoinsAdmin] Referral reward check started — referredBy:", referredBy, "userId:", awardedUserId);
   if (referredBy && referredBy !== awardedUserId) {
-    await awardReferralCoinsAdmin({
-      referrerId: referredBy,
-      referredUserId: awardedUserId,
-      referralType: "individual", // default for signup referrals completing first trip
-      relatedBookingId: bookingId,
-    });
+    try {
+      await awardReferralCoinsAdmin({
+        referrerId: referredBy,
+        referredUserId: awardedUserId,
+        referralType: "individual",
+        relatedBookingId: bookingId,
+      });
+    } catch (err) {
+      console.error("[awardBookingCoinsAdmin] Referral coins failed (non-fatal — will not block tier):", err);
+    }
+  } else {
+    console.log("[awardBookingCoinsAdmin] Referral reward skipped — referredBy:", referredBy);
   }
 
   // ── Tier evaluation ───────────────────────────────────────────────────────
@@ -446,12 +473,22 @@ export async function awardReferralCoinsAdmin(params: {
 }): Promise<void> {
   const db = getAdminDb();
 
+  console.log("[awardReferralCoinsAdmin] Referral reward check started:", {
+    referrerId: params.referrerId,
+    referredUserId: params.referredUserId,
+    relatedBookingId: params.relatedBookingId,
+    referralType: params.referralType,
+  });
+
   // Self-referral guard
   if (params.referrerId === params.referredUserId) {
-    console.warn(
-      "[awardReferralCoinsAdmin] Self-referral blocked:",
-      params.referrerId
-    );
+    console.log("[awardReferralCoinsAdmin] Referral reward skipped — self-referral blocked:", params.referrerId);
+    return;
+  }
+
+  // Guard: referrerId must be a non-empty string (UID)
+  if (!params.referrerId || params.referrerId === "") {
+    console.error("[awardReferralCoinsAdmin] Referral reward skipped — referrerId is empty or null");
     return;
   }
 
@@ -460,10 +497,7 @@ export async function awardReferralCoinsAdmin(params: {
 
   const existing = await referralRef.get();
   if (existing.exists && existing.data()?.status === "completed") {
-    console.log(
-      "[awardReferralCoinsAdmin] Already awarded — skipping:",
-      idempotencyKey
-    );
+    console.log("[awardReferralCoinsAdmin] Referral reward skipped — already awarded:", idempotencyKey);
     return;
   }
 
@@ -478,9 +512,7 @@ export async function awardReferralCoinsAdmin(params: {
     fraction < 1.0 ? Math.floor(baseCoins * fraction) : baseCoins;
 
   if (coins <= 0) {
-    console.log(
-      "[awardReferralCoinsAdmin] 0 coins to award (cancelled before travel)"
-    );
+    console.log("[awardReferralCoinsAdmin] Referral reward skipped — 0 coins (cancelled before travel)");
     return;
   }
 
@@ -490,12 +522,16 @@ export async function awardReferralCoinsAdmin(params: {
     .doc(params.referrerId)
     .get();
   if (!referrerSnap.exists) {
-    console.error(
-      "[awardReferralCoinsAdmin] Referrer not found:",
-      params.referrerId
-    );
+    console.error("[awardReferralCoinsAdmin] Referral reward skipped — Referrer not found in users collection:", params.referrerId);
     return;
   }
+
+  console.log("[awardReferralCoinsAdmin] Referrer found:", params.referrerId);
+  console.log("[awardReferralCoinsAdmin] Referral reward eligible:", {
+    referrerId: params.referrerId,
+    coins,
+    referralType: params.referralType,
+  });
 
   const referrerTier: TierName = referrerSnap.data()?.tier ?? "Hope";
 
@@ -532,8 +568,8 @@ export async function awardReferralCoinsAdmin(params: {
   const loyaltyRef = db.collection("loyaltyTransactions").doc();
   batch.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
 
-  // Update referrer balance
-  // NOTE: loyaltyPoints gets the coins; completedTripsThisYear gets +1 trip
+  // Update referrer balance.
+  // loyaltyPoints gets the coins; completedTripsThisYear gets +1 trip
   // (the referred completed trip counts toward the referrer's tier qualification).
   // tierCoins is NOT incremented — referral coins never drive tier.
   batch.set(
@@ -561,14 +597,25 @@ export async function awardReferralCoinsAdmin(params: {
     awardedAt: FieldValue.serverTimestamp(),
   });
 
-  await batch.commit();
+  try {
+    await batch.commit();
+    console.log("[awardReferralCoinsAdmin] Referral Firestore write success:", {
+      coins,
+      referrerId: params.referrerId,
+      idempotencyKey,
+    });
+  } catch (err) {
+    console.error("[awardReferralCoinsAdmin] Referral Firestore write failed:", {
+      referrerId: params.referrerId,
+      idempotencyKey,
+      err,
+    });
+    throw err;
+  }
 
   console.log(
-    "[awardReferralCoinsAdmin] Referral coins awarded:",
-    coins,
-    "to",
-    params.referrerId,
-    "(+1 trip toward tier)"
+    "[awardReferralCoinsAdmin] Referral reward granted:",
+    coins, "coins to referrerId:", params.referrerId, "(+1 trip toward tier)"
   );
 
   // Evaluate tier — the +1 trip may push the referrer to the next tier

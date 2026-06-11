@@ -28,10 +28,33 @@ export async function POST(req: NextRequest) {
       }
 
       const booking = snap.data();
-      // If the booking is already in the target status or higher (completed), skip
-      if (booking?.bookingStatus === "completed" || (booking?.bookingStatus === "confirmed" && targetStatus === "confirmed")) {
-        console.log(`⚠️ Skipped: booking already ${booking?.bookingStatus}:`, bookingId);
+
+      // FIX: Only skip loyalty entirely if coins are ALSO already awarded.
+      // Previously this returned alreadyCompleted=true even when coinsStatus
+      // was still "pending", causing welcome bonus and referral to never run
+      // for bookings that were manually set to "completed" or re-approved.
+      const coinsAlreadyAwarded = booking?.coinsStatus === "awarded";
+      const statusAlreadyAtTarget =
+        booking?.bookingStatus === "completed" ||
+        (booking?.bookingStatus === "confirmed" && targetStatus === "confirmed");
+
+      if (statusAlreadyAtTarget && coinsAlreadyAwarded) {
+        console.log(`⚠️ Skipped: booking already ${booking?.bookingStatus} with coinsStatus=awarded:`, bookingId);
         alreadyCompleted = true;
+        return;
+      }
+
+      // If status already matches target but coins not yet awarded:
+      // - Skip bookingStatus update (already correct)
+      // - STILL force paymentStatus = "paid" so awardBookingCoinsAdmin can
+      //   pass its paymentStatus check. Without this, loyalty was silently
+      //   skipped for any booking manually set to "completed" in Firestore.
+      if (statusAlreadyAtTarget) {
+        console.log(`ℹ️ Status already ${booking?.bookingStatus} but coinsStatus=${booking?.coinsStatus} — forcing paymentStatus=paid, running loyalty`);
+        tx.update(bookingRef, {
+          paymentStatus: "paid",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
         return;
       }
 
@@ -49,28 +72,32 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. LOYALTY TRIGGER — runs AFTER status is committed
+    // awardBookingCoinsAdmin handles: booking coins + welcome bonus + referral + tier.
     console.log("🎯 Awarding coins for booking:", bookingId);
     try {
       await awardBookingCoinsAdmin(bookingId);
-      console.log("✅ Coins awarded successfully for booking:", bookingId);
+      console.log("✅ awardBookingCoinsAdmin completed for booking:", bookingId);
     } catch (err) {
       console.error("❌ awardBookingCoinsAdmin failed:", err);
       // Non-fatal — admin can retry
     }
 
-    // 3. REFERRAL COINS — award if the booking user was referred
+    // 3. REFERRAL SAFETY FALLBACK — only runs if awardBookingCoinsAdmin skipped
+    // referral (e.g. coinsStatus was already "awarded" from a prior run that
+    // failed after booking coins but before referral).
     try {
       const bookingSnap = await bookingRef.get();
       const bookingData = bookingSnap.data();
       if (bookingData) {
         const userId = bookingData.userId;
-        const referredBy: string = bookingData.referredBy ?? "";
+        // referredBy may be on the booking doc (legacy) or only on the user doc
+        const bookingReferredBy: string = bookingData.referredBy ?? "";
 
-        if (!referredBy && userId) {
-          // Check the user doc for referredBy field
+        if (!bookingReferredBy && userId) {
           const userSnap = await db.collection("users").doc(userId).get();
           const userData = userSnap.data() ?? {};
-          if (userData.referredBy) {
+          if (userData.referredBy && userData.referredBy !== "") {
+            console.log("[approve-booking] Safety-fallback: calling awardReferralCoinsAdmin for referrer:", userData.referredBy);
             await awardReferralCoinsAdmin({
               referrerId: userData.referredBy,
               referredUserId: userId,
@@ -78,9 +105,10 @@ export async function POST(req: NextRequest) {
               relatedBookingId: bookingId,
             });
           }
-        } else if (referredBy) {
+        } else if (bookingReferredBy) {
+          console.log("[approve-booking] Safety-fallback: calling awardReferralCoinsAdmin from booking.referredBy:", bookingReferredBy);
           await awardReferralCoinsAdmin({
-            referrerId: referredBy,
+            referrerId: bookingReferredBy,
             referredUserId: bookingData.userId,
             referralType: "individual",
             relatedBookingId: bookingId,
@@ -88,7 +116,7 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (err) {
-      console.error("[approve-booking] awardReferralCoinsAdmin failed:", err);
+      console.error("[approve-booking] Referral safety-fallback failed (non-fatal):", err);
     }
 
     return NextResponse.json({ success: true });
