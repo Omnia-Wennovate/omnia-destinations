@@ -7,7 +7,7 @@ export interface PaymentReceipt {
   tx_ref: string;
   chapa_ref: string;
   amount: number;
-  paidAt: any; // ISO string or Firestore timestamp
+  paidAt: any;
   status: "success";
 }
 
@@ -30,17 +30,15 @@ export interface FirestoreBooking {
   totalAmount: number;
   amount?: number;
   // Loyalty fields
-  omniaServiceValue: number;  // ETB value of Omnia-managed services only
-  coinsEarned: number;        // coins awarded on completion
+  omniaServiceValue: number;  // Full ETB invoice value — used for coin calculation
+  coinsEarned: number;
   coinsStatus: "pending" | "awarded" | "reversed";
   paymentStatus: "paid" | "pending" | "unpaid" | "refunded" | "failed";
   bookingStatus: "confirmed" | "pending" | "cancelled" | "completed";
   refundNote?: string;
   specialRequests?: string;
-  // Payment receipt fields
-  paymentReceipt?: PaymentReceipt;    // latest receipt (quick access)
-  paymentReceipts?: PaymentReceipt[]; // full history of all receipts
-  // Extended receipt tracking fields (set after successful Chapa payment)
+  paymentReceipt?: PaymentReceipt;
+  paymentReceipts?: PaymentReceipt[];
   receiptUrl?: string;
   chapaReference?: string;
   paidAmount?: number;
@@ -62,16 +60,16 @@ export interface CreateBookingData {
   roomType: "single" | "sharing";
   pricePerPerson: number;
   totalAmount: number;
-  omniaServiceValue?: number; // defaults to 0 if not provided
+  omniaServiceValue?: number; // ignored — computed server-side from full invoice
   specialRequests?: string;
-  phone?: string; // full phone number with country code e.g. +251974108003
+  phone?: string;
 }
 
 // Create a new booking
 export async function createBooking(data: CreateBookingData): Promise<string> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     throw new Error("Database not initialized");
   }
@@ -101,9 +99,8 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     throw new Error("Special requests cannot exceed 1,000 characters.");
   }
 
-  // 1c. Enforce per-package booking limit (max 10 bookings per user per package)
-  // Uses a Firestore transaction snapshot to prevent race conditions
-  const { query, where, getDocs, runTransaction, doc: firestoreDoc } = modules.firestore;
+  // 1c. Enforce per-package booking limit (max 10 per user per package)
+  const { query, where, getDocs } = modules.firestore;
   const packageBookingsSnap = await getDocs(
     query(
       collection(db, "bookings"),
@@ -121,7 +118,6 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
   }
 
   // 2. Active booking cap + overlap detection
-  // Fetch all user bookings once (reuse for both checks)
   const allUserBookingsSnap = await getDocs(
     query(
       collection(db, "bookings"),
@@ -129,28 +125,42 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     )
   );
 
-  // Filter to only active bookings (exclude cancelled & rejected)
   const EXCLUDED_STATUSES = ["cancelled", "rejected"];
   const activeBookings = allUserBookingsSnap.docs.filter((d: any) => {
     const status = d.data().bookingStatus;
     return !EXCLUDED_STATUSES.includes(status);
   });
 
-  // 2a. Enforce global cap: max 35 active bookings per user
   if (activeBookings.length >= 35) {
     throw new Error(
       "You have reached the maximum booking limit (35). Please cancel an existing booking before making a new one."
     );
   }
 
-  // Compute omniaServiceValue server-side from trusted package data — NEVER use client-provided value.
-  // 10% of the total booking value (guests × price from Firestore).
+  // ── Compute amounts server-side from trusted package data ─────────────────
+  // NEVER use client-provided price values.
   const serverPricePerPerson =
     data.roomType === "sharing"
       ? ((pkg as any).sharingPrice ?? (pkg as any).pricePerPerson ?? data.pricePerPerson)
-      : ((pkg as any).singlePrice  ?? (pkg as any).pricePerPerson ?? data.pricePerPerson);
-  const serverTotalAmount   = serverPricePerPerson * data.guests;
-  const omniaServiceValue   = Math.floor(serverTotalAmount * 0.10);
+      : ((pkg as any).singlePrice ?? (pkg as any).pricePerPerson ?? data.pricePerPerson);
+
+  const serverTotalAmount = serverPricePerPerson * data.guests;
+
+  // ── omniaServiceValue = full invoice total ────────────────────────────────
+  //
+  // Per the Omnia Loyalty Program document:
+  //   "Omnia Coins are earned on every booking invoiced through Omnia.
+  //    The earning rate is based on the total invoice value you pay to Omnia —
+  //    the full amount that appears on your Omnia invoice."
+  //   Rate: 1 coin per ETB 1,000 of invoice value.
+  //
+  // The old code used Math.floor(serverTotalAmount * 0.10), which stored only
+  // 10% of the real value (e.g. ETB 70,000 for a ETB 700,000 package).
+  // That caused loyalty calculations to award 10× fewer coins than correct
+  // and showed the wrong package value in the coin history.
+  //
+  // Fix: omniaServiceValue = the full invoice total the client pays to Omnia.
+  const omniaServiceValue = serverTotalAmount;
 
   const bookingDoc = {
     userId: data.userId,
@@ -169,7 +179,7 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
     pricePerPerson: serverPricePerPerson,
     totalAmount: serverTotalAmount,
     amount: serverTotalAmount,
-    omniaServiceValue,          // server-computed, not client-provided
+    omniaServiceValue,   // full invoice value — drives coin calculation
     coinsEarned: 0,
     coinsStatus: "pending" as const,
     paymentStatus: "pending" as const,
@@ -187,7 +197,7 @@ export async function createBooking(data: CreateBookingData): Promise<string> {
 export async function getUserBookings(userId: string): Promise<FirestoreBooking[]> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     return [];
   }
@@ -200,10 +210,10 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
       where("userId", "==", userId),
       orderBy("createdAt", "desc")
     );
-    
+
     const snapshot = await getDocs(bookingsQuery);
     const bookings: FirestoreBooking[] = [];
-    
+
     snapshot.forEach((doc: any) => {
       const data = doc.data();
       bookings.push({
@@ -242,7 +252,7 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
         updatedAt: data.updatedAt,
       });
     });
-    
+
     return bookings;
   } catch (error: any) {
     logger.error("Error fetching user bookings:", error);
@@ -254,7 +264,7 @@ export async function getUserBookings(userId: string): Promise<FirestoreBooking[
 export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     return [];
   }
@@ -331,7 +341,7 @@ export async function getBookingsFromFirestore(): Promise<FirestoreBooking[]> {
 export async function cancelBooking(bookingId: string): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     throw new Error("Database not initialized");
   }
@@ -353,7 +363,7 @@ export async function markAsRefunded(
 ): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     throw new Error("Database not initialized");
   }
@@ -367,39 +377,6 @@ export async function markAsRefunded(
   });
 
   await reverseBookingCoins(bookingId);
-}
-
-// Internal helper: award referral coins to the referrer if the booking user was referred
-async function tryAwardReferralCoins(bookingId: string): Promise<void> {
-  const db = await getFirebaseDb()
-  const modules = await getFirebaseModules()
-  if (!db || !modules.firestore) return
-
-  const { doc, getDoc } = modules.firestore
-  try {
-    const bookingSnap = await getDoc(doc(db, "bookings", bookingId))
-    if (!bookingSnap.exists()) return
-    const booking = bookingSnap.data() as any
-    const userId: string = booking.userId
-    if (!userId) return
-
-    const userSnap = await getDoc(doc(db, "users", userId))
-    if (!userSnap.exists()) return
-    const userData = userSnap.data() as any
-    const referredBy: string = userData.referredBy || ''
-    if (!referredBy) return // user was not referred
-
-    console.log('[tryAwardReferralCoins] Awarding referral coins to referrer:', referredBy)
-    await awardReferralCoins({
-      referrerId: referredBy,
-      referredUserId: userId,
-      referralType: 'individual',
-      relatedBookingId: bookingId,
-    })
-  } catch (err) {
-    console.error('[tryAwardReferralCoins] Error:', err)
-    // Non-fatal — don't block the main flow
-  }
 }
 
 import { triggerLoyaltyCoinsAdmin } from "@/lib/actions/loyalty.actions";
@@ -444,7 +421,7 @@ export async function updateBookingStatusByTxRef(
   const snapshot = await getDocs(q);
 
   if (snapshot.empty) throw new Error("Booking not found");
-  
+
   const bookingId = snapshot.docs[0].id;
   return updateBookingStatus(bookingId, bookingStatus);
 }
@@ -463,7 +440,7 @@ export async function updatePaymentStatusByTxRef(
   const snapshot = await getDocs(q);
 
   if (snapshot.empty) throw new Error("Booking not found");
-  
+
   const bookingId = snapshot.docs[0].id;
   return updatePaymentStatus(bookingId, paymentStatus);
 }
@@ -475,7 +452,7 @@ export async function updatePaymentStatus(
 ): Promise<void> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  
+
   if (!db || !modules.firestore) {
     throw new Error("Database not initialized");
   }
