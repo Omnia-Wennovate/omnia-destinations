@@ -72,7 +72,9 @@ export async function POST(req: NextRequest) {
     // The real package value (trustedAmount) stays in Firestore for loyalty/business logic.
     const CHAPA_TRIGGER_AMOUNT = 10;
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // Derive the app URL from the incoming request so callback/return URLs
+    // always point to the correct host (works on localhost, Vercel, and custom domains).
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
 
     const chapaPayload = {
       amount: CHAPA_TRIGGER_AMOUNT.toString(),   // fixed 10 ETB trigger payment
