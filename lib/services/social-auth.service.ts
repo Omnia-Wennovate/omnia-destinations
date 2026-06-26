@@ -53,25 +53,7 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
     };
   }
 
-  // Apply referral from localStorage (set when user visited /signup?ref=CODE)
-  let referredBy = "";
-  const refCode = typeof window !== "undefined" ? localStorage.getItem("refCode") : null;
-  if (refCode) {
-    try {
-      const { query, collection, where, getDocs, updateDoc: updateDocFS, increment } = modules.firestore;
-      const q = query(collection(db, "users"), where("referralCode", "==", refCode.toUpperCase().trim()));
-      const snap = await getDocs(q);
-      if (!snap.empty && snap.docs[0].id !== uid) {
-        referredBy = snap.docs[0].id;
-        await updateDocFS(snap.docs[0].ref, { totalReferrals: increment(1) });
-        console.log("ReferredBy set:", referredBy);
-      }
-    } catch {
-      // Non-fatal
-    }
-    if (typeof window !== "undefined") localStorage.removeItem("refCode");
-  }
-
+  // Create user document FIRST (so /api/referral/process can find it)
   await setDoc(userDocRef, {
     name: displayName,
     email,
@@ -82,11 +64,31 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
     totalCoinsEarned: 0,
     annualOmniaValue: 0,
     referralCode: generateReferralCode(),
-    referredBy,
+    referredBy: "",
     totalReferrals: 0,
     createdAt: serverTimestamp(),
     authProvider: firebaseUser.providerData?.[0]?.providerId || "unknown",
   });
+
+  // Apply referral from localStorage (set when user visited /signup?ref=CODE)
+  // Called AFTER user doc exists so the API can update it server-side.
+  const refCode = typeof window !== "undefined" ? localStorage.getItem("refCode") : null;
+  if (refCode) {
+    try {
+      const res = await fetch("/api/referral/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referralCode: refCode.toUpperCase().trim(), newUserId: uid }),
+      });
+      const result = await res.json();
+      if (result.referrerId) {
+        console.log("ReferredBy set:", result.referrerId);
+      }
+    } catch {
+      // Non-fatal
+    }
+    if (typeof window !== "undefined") localStorage.removeItem("refCode");
+  }
 
   return { id: uid, email, firstName, lastName, role: "USER" };
 }

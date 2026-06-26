@@ -1,28 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
+import {
+  REFERRAL_COINS,
+  COINS_EXPIRY_MONTHS,
+} from "@/lib/services/loyalty.service";
 
 /**
- * POST /api/process-referral
+ * POST /api/referral/process
  *
  * Called when a new user signs up with a referral code.
- *
- * Per the Omnia Loyalty Program rules:
- *   - Referral coins are NOT awarded at signup.
- *   - Coins are awarded ONLY after the referred person's trip is fully
- *     completed (individual: 150 coins, group: 350 coins, corporate: 600 coins).
- *   - This route only records `referredBy` on the new user document so that
- *     the booking-completion flow can look it up and award coins at that point.
  *
  * What this route does:
  *   1. Validate the referral code and find the referrer.
  *   2. Guard against self-referrals.
  *   3. Atomically save `referredBy` on the new user + increment `totalReferrals`
  *      on the referrer.
- *
- * What this route does NOT do:
- *   - Award any coins (that happens in the booking-completion flow).
- *   - Count a trip toward the referrer's tier (that also happens at completion).
+ *   4. Award 150 referral-signup coins to the referrer (idempotent).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -82,8 +76,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 5. Atomic batch write ─────────────────────────────────────────────────
-    //    Save referredBy on the new user and increment the referrer's counter.
-    //    No coins are awarded here — coins come only after a completed trip.
+    //    Save referredBy on the new user, increment referrer's counter,
+    //    and award referral-signup coins to the referrer.
+    const idempotencyKey = `signup_${referrerId}_${newUserId}`;
+    const referralGuardRef = db.collection("referrals").doc(idempotencyKey);
+    const guardSnap = await referralGuardRef.get();
+    const alreadyAwarded = guardSnap.exists && guardSnap.data()?.status === "completed";
+
+    const coins = REFERRAL_COINS.individual; // 150 coins
+
     const batch = db.batch();
 
     batch.update(newUserRef, {
@@ -92,16 +93,80 @@ export async function POST(req: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    batch.update(referrerDoc.ref, {
-      totalReferrals: FieldValue.increment(1),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    // When awarding coins, combine referrer counter + balance into ONE write
+    // (Firestore batches: last write to a doc path wins, so we must merge them)
+    if (!alreadyAwarded) {
+      const exp = new Date();
+      exp.setMonth(exp.getMonth() + COINS_EXPIRY_MONTHS);
+
+      const referrerTier = referrerDoc.data()?.tier ?? "Hope";
+
+      const txData = {
+        userId: referrerId,
+        coins,
+        amount: coins,
+        type: "referral_signup",
+        affectsTier: false,
+        relatedBookingId: null,
+        multiplierApplied: 1,
+        tierAtTime: referrerTier,
+        reason: `Referral signup reward: a new user joined via your referral link`,
+        createdAt: FieldValue.serverTimestamp(),
+        expiresAt: exp.toISOString(),
+        status: "active",
+      };
+
+      const histRef = db
+        .collection("users")
+        .doc(referrerId)
+        .collection("coinsHistory")
+        .doc();
+      batch.set(histRef, txData);
+
+      const loyaltyRef = db.collection("loyaltyTransactions").doc();
+      batch.set(loyaltyRef, { ...txData, coinsHistoryId: histRef.id });
+
+      // Single merged write: totalReferrals + coin balance
+      batch.set(
+        referrerDoc.ref,
+        {
+          totalReferrals: FieldValue.increment(1),
+          loyaltyPoints: FieldValue.increment(coins),
+          totalCoinsEarned: FieldValue.increment(coins),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      // Idempotency guard doc
+      batch.set(referralGuardRef, {
+        referrerId,
+        referredUserId: newUserId,
+        referralType: "individual",
+        rewardAmount: coins,
+        type: "signup",
+        status: "completed",
+        awardedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      // Coins already awarded — only increment the referral counter
+      batch.set(
+        referrerDoc.ref,
+        {
+          totalReferrals: FieldValue.increment(1),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
 
     await batch.commit();
 
     console.log(
       `[process-referral] ✅ referredBy=${referrerId} saved for user=${newUserId}` +
-      ` — coins will be awarded when the referred person completes a trip`
+      (alreadyAwarded
+        ? ` — coins already awarded previously`
+        : ` — ${coins} referral-signup coins awarded to referrer`)
     );
 
     return NextResponse.json({ success: true, referrerId });

@@ -114,8 +114,8 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
 
       // Booking limit validation
       const travelersCount = parseInt(formData.travelers || '0')
-      if (isNaN(travelersCount) || travelersCount < 1 || travelersCount > 10) {
-        setBookingError('You can only book between 1 and 10 people per package.')
+      if (isNaN(travelersCount) || travelersCount < 1 || travelersCount > 50) {
+        setBookingError('You can only book between 1 and 50 people per package.')
         return
       }
 
@@ -158,8 +158,8 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
       return
     }
 
-    if (travelersCount > 10) {
-      setBookingError('You can only book between 1 and 10 people per package.')
+    if (travelersCount > 50) {
+      setBookingError('You can only book between 1 and 50 people per package.')
       return
     }
 
@@ -549,7 +549,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                   <SelectValue placeholder="Select travelers" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
                     <SelectItem key={num} value={num.toString()}>
                       {num} {num === 1 ? 'Traveler' : 'Travelers'}
                     </SelectItem>
@@ -641,7 +641,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                   !formData.travelDate ||
                   !formData.roomType ||
                   parseInt(formData.travelers || '0') < 1 ||
-                  parseInt(formData.travelers || '0') > 10
+                  parseInt(formData.travelers || '0') > 50
                 ))
               }
             >
