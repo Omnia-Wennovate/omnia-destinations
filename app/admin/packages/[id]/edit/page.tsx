@@ -8,6 +8,7 @@ import {
   Upload,
   X,
   Plus,
+  Trash2,
   Loader2,
   AlertCircle,
   ImageIcon,
@@ -81,14 +82,8 @@ export default function EditPackagePage() {
   const [excludedServices, setExcludedServices] = useState<string[]>([''])
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
 
-  // Daily itinerary state
-  const [day1, setDay1] = useState('')
-  const [day2, setDay2] = useState('')
-  const [day3, setDay3] = useState('')
-  const [day4, setDay4] = useState('')
-  const [day5, setDay5] = useState('')
-  const [day6, setDay6] = useState('')
-  const [day7, setDay7] = useState('')
+  // Daily itinerary state (dynamic array)
+  const [itineraryDays, setItineraryDays] = useState<string[]>(['', '', '', '', '', '', ''])
 
   // Media state
   const [featuredImage, setFeaturedImage] = useState<string | null>(null)
@@ -119,14 +114,20 @@ export default function EditPackagePage() {
       setFeaturedImage(pkg.featuredImageURL || null)
       setGalleryImages(pkg.galleryImageURLs || [])
       setVideoURL(pkg.videoURL || null)
-      // Load daily itinerary
-      setDay1(pkg.day1 || '')
-      setDay2(pkg.day2 || '')
-      setDay3(pkg.day3 || '')
-      setDay4(pkg.day4 || '')
-      setDay5(pkg.day5 || '')
-      setDay6(pkg.day6 || '')
-      setDay7(pkg.day7 || '')
+      // Load daily itinerary dynamically (detect all dayN keys)
+      const loadedDays: string[] = []
+      let dayIndex = 1
+      while (pkg[`day${dayIndex}`] !== undefined && pkg[`day${dayIndex}`] !== '') {
+        loadedDays.push(pkg[`day${dayIndex}`] || '')
+        dayIndex++
+      }
+      // Also check for any remaining consecutive days that might be empty but exist
+      // Ensure at least 7 days are shown (matching original behavior) or however many exist
+      const minDays = Math.max(7, loadedDays.length)
+      while (loadedDays.length < minDays) {
+        loadedDays.push('')
+      }
+      setItineraryDays(loadedDays)
     } catch (err) {
       setError('Failed to load package')
     } finally {
@@ -148,6 +149,12 @@ export default function EditPackagePage() {
       setSaving(true)
       setError(null)
 
+      // Build dynamic day fields from itineraryDays array
+      const dayFields: Record<string, string | undefined> = {}
+      itineraryDays.forEach((dayText, i) => {
+        dayFields[`day${i + 1}`] = dayText.trim() || undefined
+      })
+
       await updatePackage(packageId, {
         title,
         slug,
@@ -161,13 +168,7 @@ export default function EditPackagePage() {
         includedServices: includedServices.filter(Boolean),
         excludedServices: excludedServices.filter(Boolean),
         status,
-        day1: day1.trim() || undefined,
-        day2: day2.trim() || undefined,
-        day3: day3.trim() || undefined,
-        day4: day4.trim() || undefined,
-        day5: day5.trim() || undefined,
-        day6: day6.trim() || undefined,
-        day7: day7.trim() || undefined,
+        ...dayFields,
       })
 
       router.push('/admin/packages')
@@ -218,6 +219,12 @@ export default function EditPackagePage() {
         return
       }
 
+      // Build dynamic day fields from itineraryDays array
+      const publishDayFields: Record<string, string | undefined> = {}
+      itineraryDays.forEach((dayText, i) => {
+        publishDayFields[`day${i + 1}`] = dayText.trim() || undefined
+      })
+
       await updatePackage(packageId, {
         title,
         slug,
@@ -231,13 +238,7 @@ export default function EditPackagePage() {
         includedServices: includedServices.filter(Boolean),
         excludedServices: excludedServices.filter(Boolean),
         status: 'published',
-        day1: day1.trim() || undefined,
-        day2: day2.trim() || undefined,
-        day3: day3.trim() || undefined,
-        day4: day4.trim() || undefined,
-        day5: day5.trim() || undefined,
-        day6: day6.trim() || undefined,
-        day7: day7.trim() || undefined,
+        ...publishDayFields,
       })
 
       await updatePackageStatus(packageId, 'published')
@@ -508,25 +509,46 @@ export default function EditPackagePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">Fill in only the days you want to display. Empty days will not be shown to users.</p>
-              {[
-                { label: 'Day 1 Activity', value: day1, setter: setDay1 },
-                { label: 'Day 2 Activity', value: day2, setter: setDay2 },
-                { label: 'Day 3 Activity', value: day3, setter: setDay3 },
-                { label: 'Day 4 Activity', value: day4, setter: setDay4 },
-                { label: 'Day 5 Activity', value: day5, setter: setDay5 },
-                { label: 'Day 6 Activity', value: day6, setter: setDay6 },
-                { label: 'Day 7 Activity', value: day7, setter: setDay7 },
-              ].map(({ label, value, setter }, idx) => (
-                <div key={idx} className="space-y-2">
-                  <Label>{label}</Label>
-                  <Textarea
-                    value={value}
-                    onChange={(e) => setter(e.target.value)}
-                    placeholder={`Describe ${label.toLowerCase()}...`}
-                    rows={2}
-                  />
-                </div>
-              ))}
+              {itineraryDays.map((dayValue, idx) => {
+                const label = `Day ${idx + 1} Activity`
+                return (
+                  <div key={idx} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>{label}</Label>
+                      {itineraryDays.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            setItineraryDays(itineraryDays.filter((_, i) => i !== idx))
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <Textarea
+                      value={dayValue}
+                      onChange={(e) => {
+                        const updated = [...itineraryDays]
+                        updated[idx] = e.target.value
+                        setItineraryDays(updated)
+                      }}
+                      placeholder={`Describe ${label.toLowerCase()}...`}
+                      rows={2}
+                    />
+                  </div>
+                )
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setItineraryDays([...itineraryDays, ''])}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Another Day
+              </Button>
             </CardContent>
           </Card>
 

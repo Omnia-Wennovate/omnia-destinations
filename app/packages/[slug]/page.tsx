@@ -94,29 +94,24 @@ export default function PackageDetailPage() {
     )
   }
 
-  // Build itinerary from day1–day7 fields; skip empty days
-  const itinerary = [
-    packageData.day1,
-    packageData.day2,
-    packageData.day3,
-    packageData.day4,
-    packageData.day5,
-    packageData.day6,
-    packageData.day7,
-  ].reduce<{ day: number; title: string; description: string; activities: string[] }[]>(
-    (acc, text, i) => {
-      if (text?.trim()) {
-        acc.push({
-          day: i + 1,
-          title: `Day ${i + 1}`,
-          description: text.trim(),
-          activities: [],
-        })
-      }
-      return acc
-    },
-    []
-  )
+  // Build itinerary from dayN fields dynamically; skip empty days
+  const itinerary: { day: number; title: string; description: string; activities: string[] }[] = []
+  let dayIdx = 1
+  while (true) {
+    const text = (packageData as any)[`day${dayIdx}`]
+    if (text === undefined && dayIdx > 7) break // stop after checking beyond day7 if no more days
+    if (text?.trim()) {
+      itinerary.push({
+        day: dayIdx,
+        title: `Day ${dayIdx}`,
+        description: text.trim(),
+        activities: [],
+      })
+    }
+    dayIdx++
+    // Safety: stop at a reasonable upper bound
+    if (dayIdx > 100) break
+  }
 
   const tourData = {
     id: packageData.id,
