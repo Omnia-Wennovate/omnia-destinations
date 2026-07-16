@@ -78,6 +78,8 @@ export default function EditPackagePage() {
   const [duration, setDuration] = useState('')
   const [location, setLocation] = useState('')
   const [category, setCategory] = useState('')
+  const [availableFrom, setAvailableFrom] = useState('')
+  const [availableUntil, setAvailableUntil] = useState('')
   const [includedServices, setIncludedServices] = useState<string[]>([''])
   const [excludedServices, setExcludedServices] = useState<string[]>([''])
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
@@ -108,6 +110,29 @@ export default function EditPackagePage() {
       setDuration(pkg.duration.toString())
       setLocation(pkg.location)
       setCategory(pkg.category)
+      
+      const formatDateForInput = (dateValue: any) => {
+        if (!dateValue) return ''
+        if (typeof dateValue === 'string') {
+          if (dateValue.length === 10) return dateValue
+          try {
+            return new Date(dateValue).toISOString().split('T')[0]
+          } catch (e) {
+            return dateValue.split('T')[0]
+          }
+        }
+        if (dateValue.toDate && typeof dateValue.toDate === 'function') {
+          return dateValue.toDate().toISOString().split('T')[0]
+        }
+        if (dateValue instanceof Date) {
+          return dateValue.toISOString().split('T')[0]
+        }
+        return ''
+      }
+      
+      setAvailableFrom(formatDateForInput(pkg.availableFrom))
+      setAvailableUntil(formatDateForInput(pkg.availableUntil))
+      
       setIncludedServices(pkg.includedServices.length > 0 ? pkg.includedServices : [''])
       setExcludedServices(pkg.excludedServices.length > 0 ? pkg.excludedServices : [''])
       setStatus(pkg.status)
@@ -150,10 +175,14 @@ export default function EditPackagePage() {
       setError(null)
 
       // Build dynamic day fields from itineraryDays array
-      const dayFields: Record<string, string | undefined> = {}
-      itineraryDays.forEach((dayText, i) => {
-        dayFields[`day${i + 1}`] = dayText.trim() || undefined
-      })
+      const dayFields: Record<string, string> = {}
+      for (let i = 0; i < Math.max(20, itineraryDays.length); i++) {
+        if (i < itineraryDays.length) {
+          dayFields[`day${i + 1}`] = itineraryDays[i].trim()
+        } else {
+          dayFields[`day${i + 1}`] = ''
+        }
+      }
 
       await updatePackage(packageId, {
         title,
@@ -165,6 +194,8 @@ export default function EditPackagePage() {
         duration: parseInt(duration) || 0,
         location,
         category,
+        availableFrom,
+        availableUntil,
         includedServices: includedServices.filter(Boolean),
         excludedServices: excludedServices.filter(Boolean),
         status,
@@ -207,6 +238,8 @@ export default function EditPackagePage() {
         duration: parseInt(duration) || 0,
         location,
         category,
+        availableFrom,
+        availableUntil,
         includedServices: includedServices.filter(Boolean),
         excludedServices: excludedServices.filter(Boolean),
         featuredImageURL: featuredImage || '',
@@ -220,10 +253,14 @@ export default function EditPackagePage() {
       }
 
       // Build dynamic day fields from itineraryDays array
-      const publishDayFields: Record<string, string | undefined> = {}
-      itineraryDays.forEach((dayText, i) => {
-        publishDayFields[`day${i + 1}`] = dayText.trim() || undefined
-      })
+      const publishDayFields: Record<string, string> = {}
+      for (let i = 0; i < Math.max(20, itineraryDays.length); i++) {
+        if (i < itineraryDays.length) {
+          publishDayFields[`day${i + 1}`] = itineraryDays[i].trim()
+        } else {
+          publishDayFields[`day${i + 1}`] = ''
+        }
+      }
 
       await updatePackage(packageId, {
         title,
@@ -235,6 +272,8 @@ export default function EditPackagePage() {
         duration: parseInt(duration) || 0,
         location,
         category,
+        availableFrom,
+        availableUntil,
         includedServices: includedServices.filter(Boolean),
         excludedServices: excludedServices.filter(Boolean),
         status: 'published',
@@ -726,6 +765,26 @@ export default function EditPackagePage() {
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g., Maldives"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="availableFrom">Available From *</Label>
+                <Input
+                  id="availableFrom"
+                  type="date"
+                  value={availableFrom}
+                  onChange={(e) => setAvailableFrom(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="availableUntil">Available Until *</Label>
+                <Input
+                  id="availableUntil"
+                  type="date"
+                  value={availableUntil}
+                  onChange={(e) => setAvailableUntil(e.target.value)}
                 />
               </div>
 
