@@ -464,16 +464,6 @@ export default function EditPackagePage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="fullDescription">Full Description *</Label>
-                <Textarea
-                  id="fullDescription"
-                  value={fullDescription}
-                  onChange={(e) => setFullDescription(e.target.value)}
-                  placeholder="Detailed description..."
-                  rows={6}
-                />
-              </div>
             </CardContent>
           </Card>
 
@@ -588,6 +578,25 @@ export default function EditPackagePage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Another Day
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Additional Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Additional Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="fullDescription">Additional Information *</Label>
+                <Textarea
+                  id="fullDescription"
+                  value={fullDescription}
+                  onChange={(e) => setFullDescription(e.target.value)}
+                  placeholder="Detailed description..."
+                  rows={6}
+                />
+              </div>
             </CardContent>
           </Card>
 

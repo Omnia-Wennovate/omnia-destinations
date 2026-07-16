@@ -206,14 +206,6 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Content */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Description */}
-            <Card className="p-6 md:p-8">
-              <h2 className="text-2xl md:text-3xl font-bold mb-4">About This Experience</h2>
-              <p className="text-muted-foreground leading-relaxed text-base md:text-lg">
-                {tour.description || `Join us for an unforgettable journey through ${tour.location}. This carefully curated experience offers the perfect blend of adventure, culture, and relaxation.`}
-              </p>
-            </Card>
-
             {/* Tabs for Details */}
             <Card className="p-6 md:p-8">
               <Tabs defaultValue="itinerary" className="w-full">
@@ -331,6 +323,14 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                   )}
                 </TabsContent>
               </Tabs>
+            </Card>
+
+            {/* Additional Information */}
+            <Card className="p-6 md:p-8">
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">Additional Information</h2>
+              <p className="text-muted-foreground leading-relaxed text-base md:text-lg whitespace-pre-line">
+                {tour.description || `Join us for an unforgettable journey through ${tour.location}. This carefully curated experience offers the perfect blend of adventure, culture, and relaxation.`}
+              </p>
             </Card>
 
             {/* Trust Badges */}
