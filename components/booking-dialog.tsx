@@ -335,7 +335,7 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                 </div>
                 <div className="flex justify-between border-t pt-2 mt-2">
                   <span className="text-muted-foreground">Total Amount:</span>
-                  <span className="font-bold text-primary">${totalPrice.toLocaleString()}</span>
+                  <span className="font-bold text-primary">{totalPrice.toLocaleString()} ETB</span>
                 </div>
               </div>
             </div>
@@ -526,12 +526,12 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                 <label className={`flex cursor-pointer flex-col items-center justify-between rounded-md border-2 p-4 pt-6 ${formData.roomType === 'single' ? 'border-primary bg-primary/5' : 'border-muted bg-popover hover:bg-accent hover:text-accent-foreground'}`}>
                   <input type="radio" name="roomType" value="single" className="sr-only" onChange={(e) => handleInputChange('roomType', e.target.value)} />
                   <span className="text-sm font-semibold text-center">Single Room</span>
-                  <span className="mt-1 text-sm text-primary font-bold text-center">${packageData.singlePrice}/person</span>
+                  <span className="mt-1 text-sm text-primary font-bold text-center">{packageData.singlePrice.toLocaleString()} ETB/person</span>
                 </label>
                 <label className={`flex cursor-pointer flex-col items-center justify-between rounded-md border-2 p-4 pt-6 ${formData.roomType === 'sharing' ? 'border-primary bg-primary/5' : 'border-muted bg-popover hover:bg-accent hover:text-accent-foreground'}`}>
                   <input type="radio" name="roomType" value="sharing" className="sr-only" onChange={(e) => handleInputChange('roomType', e.target.value)} />
                   <span className="text-sm font-semibold text-center">Sharing Room</span>
-                  <span className="mt-1 text-sm text-primary font-bold text-center">${packageData.sharingPrice}/person</span>
+                  <span className="mt-1 text-sm text-primary font-bold text-center">{packageData.sharingPrice.toLocaleString()} ETB/person</span>
                 </label>
               </div>
             </div>
@@ -605,12 +605,12 @@ export function BookingDialog({ open, onOpenChange, children, packageData }: Boo
                 <div className="border-t border-border pt-2 mt-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      ${pricePerPerson.toLocaleString()} x {formData.travelers} travelers
+                      {pricePerPerson.toLocaleString()} ETB x {formData.travelers} travelers
                     </span>
                   </div>
                   <div className="flex justify-between text-lg font-bold">
                     <span className="text-foreground">Total:</span>
-                    <span className="text-primary">${totalPrice.toLocaleString()}</span>
+                    <span className="text-primary">{totalPrice.toLocaleString()} ETB</span>
                   </div>
                 </div>
               </div>

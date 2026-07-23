@@ -9,4 +9,4 @@ export const NAV_LINKS: NavLink[] = [
   { href: '/contact', label: 'Contact Us' },
 ]
 
-export const CURRENCIES: Currency[] = ['ETB', 'USD', 'EUR', 'GBP']
+export const CURRENCIES: Currency[] = ['ETB']

@@ -211,8 +211,8 @@ export default function AdminPackagesPage() {
                   <TableCell>{pkg.location}</TableCell>
                   <TableCell>
                     <div className="flex flex-col text-sm">
-                      <span>Single: ${pkg.singlePrice}</span>
-                      <span className="text-muted-foreground">Sharing: ${pkg.sharingPrice}</span>
+                      <span>Single: {pkg.singlePrice.toLocaleString()} ETB</span>
+                      <span className="text-muted-foreground">Sharing: {pkg.sharingPrice.toLocaleString()} ETB</span>
                     </div>
                   </TableCell>
                   <TableCell>{pkg.duration} days</TableCell>

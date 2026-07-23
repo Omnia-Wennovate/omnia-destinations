@@ -363,12 +363,12 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm text-muted-foreground">Single:</span>
-                      <span className="text-3xl font-bold text-primary">${tour.singlePrice}</span>
+                      <span className="text-3xl font-bold text-primary">{tour.singlePrice.toLocaleString()} ETB</span>
                       <span className="text-sm text-muted-foreground">/person</span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm text-muted-foreground">Sharing:</span>
-                      <span className="text-3xl font-bold text-primary">${tour.sharingPrice}</span>
+                      <span className="text-3xl font-bold text-primary">{tour.sharingPrice.toLocaleString()} ETB</span>
                       <span className="text-sm text-muted-foreground">/person</span>
                     </div>
                   </div>

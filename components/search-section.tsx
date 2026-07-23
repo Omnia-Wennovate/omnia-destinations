@@ -110,19 +110,19 @@ export function SearchSection() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <ScrollReveal direction="up" delay={0}>
               <div className="text-center">
-                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">500+</div>
+                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">70+</div>
                 <div className="text-sm text-muted-foreground">Destinations</div>
               </div>
             </ScrollReveal>
             <ScrollReveal direction="up" delay={0.1}>
               <div className="text-center">
-                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">10K+</div>
+                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">2k+</div>
                 <div className="text-sm text-muted-foreground">Happy Travelers</div>
               </div>
             </ScrollReveal>
             <ScrollReveal direction="up" delay={0.2}>
               <div className="text-center">
-                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">50+</div>
+                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">70+</div>
                 <div className="text-sm text-muted-foreground">Tour Packages</div>
               </div>
             </ScrollReveal>

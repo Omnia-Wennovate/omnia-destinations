@@ -102,12 +102,12 @@ export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps)
           <div className="flex flex-col">
             <div className="flex items-baseline gap-1">
               <span className="text-xs text-muted-foreground">Single:</span>
-              <span className="text-lg font-bold text-primary">${singlePrice}</span>
+              <span className="text-lg font-bold text-primary">{singlePrice.toLocaleString()} ETB</span>
               <span className="text-[10px] text-muted-foreground">/person</span>
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-xs text-muted-foreground">Sharing:</span>
-              <span className="text-lg font-bold text-primary">${sharingPrice}</span>
+              <span className="text-lg font-bold text-primary">{sharingPrice.toLocaleString()} ETB</span>
               <span className="text-[10px] text-muted-foreground">/person</span>
             </div>
           </div>

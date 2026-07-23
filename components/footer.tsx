@@ -111,16 +111,16 @@ export function Footer() {
               <li className="flex items-start gap-3">
                 <MapPin className="h-5 w-5 shrink-0 text-primary" />
                 <span className="text-sm text-muted-foreground">
-                  Addis Ababa, Ethiopia
+                  Bole, Gazebo Roundabout, Rizq Building 4th floor, Addis Ababa, Ethiopia
                 </span>
               </li>
               <li className="flex items-center gap-3">
                 <Phone className="h-5 w-5 shrink-0 text-primary" />
-                <span className="text-sm text-muted-foreground">+251 911 123 456</span>
+                <span className="text-sm text-muted-foreground">+251925919293</span>
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="h-5 w-5 shrink-0 text-primary" />
-                <span className="text-sm text-muted-foreground">info@omniatravel.com</span>
+                <span className="text-sm text-muted-foreground">Info@omniadestinations.com</span>
               </li>
             </ul>
           </div>

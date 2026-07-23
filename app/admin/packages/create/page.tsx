@@ -113,12 +113,12 @@ export default function CreatePackagePage() {
       setError(null)
 
       // Build dynamic day fields from itineraryDays array
-        const dayFields: Record<string, string> = {}
-        itineraryDays.forEach((dayText, i) => {
-          if (dayText.trim()) {
-            dayFields[`day${i + 1}`] = dayText.trim()
-          }
-        })
+      const dayFields: Record<string, string> = {}
+      itineraryDays.forEach((dayText, i) => {
+        if (dayText.trim()) {
+          dayFields[`day${i + 1}`] = dayText.trim()
+        }
+      })
 
       if (packageId) {
         // Update existing draft
@@ -209,69 +209,69 @@ export default function CreatePackagePage() {
     }
   }
 
-const handleFeaturedImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0]
-  if (!file) return
+  const handleFeaturedImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-  if (!packageId) {
-    setError('Please save the package as draft first')
-    return
-  }
-
-  try {
-    setError(null)
-
-    const url = await uploadFeaturedImage(file, packageId, setUploadProgress)
-
-    if (!url) {
-      throw new Error('No image URL returned')
+    if (!packageId) {
+      setError('Please save the package as draft first')
+      return
     }
 
-    setFeaturedImage(url)
-  } catch (err) {
-    console.error(err)
-    setError('Featured image upload failed')
-  } finally {
-    setUploadProgress(null)
-  }
-}
+    try {
+      setError(null)
 
-const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files
-  if (!files || files.length === 0) return
+      const url = await uploadFeaturedImage(file, packageId, setUploadProgress)
 
-  if (!packageId) {
-    setError('Please save as draft first before uploading images')
-    return
-  }
-
-  try {
-    setError(null)
-
-    for (const file of Array.from(files)) {
-      const url = await uploadGalleryImage(file, packageId, setUploadProgress)
-
-      setGalleryImages((prev) => [...prev, url])
-
-      // ✅ If featured image does not exist, save the first gallery image as featured
-      if (!featuredImage) {
-        setFeaturedImage(url)
-
-        const { updatePackage } = await import('@/lib/services/packages.service')
-
-        await updatePackage(packageId, {
-          featuredImageURL: url,
-        })
+      if (!url) {
+        throw new Error('No image URL returned')
       }
+
+      setFeaturedImage(url)
+    } catch (err) {
+      console.error(err)
+      setError('Featured image upload failed')
+    } finally {
+      setUploadProgress(null)
+    }
+  }
+
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    if (!packageId) {
+      setError('Please save as draft first before uploading images')
+      return
     }
 
-    setUploadProgress(null)
+    try {
+      setError(null)
 
-  } catch (err) {
-    setError('Failed to upload gallery image')
-    setUploadProgress(null)
+      for (const file of Array.from(files)) {
+        const url = await uploadGalleryImage(file, packageId, setUploadProgress)
+
+        setGalleryImages((prev) => [...prev, url])
+
+        // ✅ If featured image does not exist, save the first gallery image as featured
+        if (!featuredImage) {
+          setFeaturedImage(url)
+
+          const { updatePackage } = await import('@/lib/services/packages.service')
+
+          await updatePackage(packageId, {
+            featuredImageURL: url,
+          })
+        }
+      }
+
+      setUploadProgress(null)
+
+    } catch (err) {
+      setError('Failed to upload gallery image')
+      setUploadProgress(null)
+    }
   }
-}
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
