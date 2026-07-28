@@ -54,6 +54,10 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
   }
 
   // Create user document FIRST (so /api/referral/process can find it)
+  // Read referral code from localStorage before creating the doc
+  const refCode = typeof window !== "undefined" ? localStorage.getItem("refCode") : null;
+  const usedCode = refCode ? refCode.toUpperCase().trim() : "";
+
   await setDoc(userDocRef, {
     name: displayName,
     email,
@@ -62,9 +66,12 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
     tier: "Hope",
     loyaltyPoints: 0,
     totalCoinsEarned: 0,
+    totalPackages: 0,
+    totalSpend: 0,
     annualOmniaValue: 0,
     referralCode: generateReferralCode(),
-    referredBy: "",
+    referralCodeUsed: usedCode,
+    referredBy: "",          // server-side API sets this after validating the code
     totalReferrals: 0,
     createdAt: serverTimestamp(),
     authProvider: firebaseUser.providerData?.[0]?.providerId || "unknown",
@@ -72,13 +79,12 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
 
   // Apply referral from localStorage (set when user visited /signup?ref=CODE)
   // Called AFTER user doc exists so the API can update it server-side.
-  const refCode = typeof window !== "undefined" ? localStorage.getItem("refCode") : null;
-  if (refCode) {
+  if (usedCode) {
     try {
       const res = await fetch("/api/referral/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referralCode: refCode.toUpperCase().trim(), newUserId: uid }),
+        body: JSON.stringify({ referralCode: usedCode, newUserId: uid }),
       });
       const result = await res.json();
       if (result.referrerId) {
@@ -88,6 +94,21 @@ async function handleSocialUser(firebaseUser: any): Promise<SocialAuthResult> {
       // Non-fatal
     }
     if (typeof window !== "undefined") localStorage.removeItem("refCode");
+  }
+
+  // ── Award 100 welcome bonus coins (server-side, idempotent) ──────────────
+  // Mirrors the exact call in the email signup flow.
+  // awardWelcomeBonusAdmin checks for an existing welcome_bonus transaction
+  // before writing, so duplicate calls are always safe.
+  try {
+    await fetch("/api/auth/welcome-bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: uid }),
+    });
+    console.log("[social-auth] Welcome bonus awarded for:", uid);
+  } catch (e) {
+    console.error("[social-auth] Welcome bonus API failed (non-fatal):", e);
   }
 
   return { id: uid, email, firstName, lastName, role: "USER" };
