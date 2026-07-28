@@ -26,49 +26,68 @@ export interface FirestoreUser {
 export async function getUsersFromFirestore(): Promise<FirestoreUser[]> {
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  if (!db || !modules.firestore) return [];
+  if (!db || !modules.firestore) {
+    console.error("[users.service] getUsersFromFirestore: Firebase db/modules unavailable");
+    return [];
+  }
 
   const { collection, getDocs, query, orderBy } = modules.firestore;
 
+  const mapDoc = (d: any): FirestoreUser => {
+    const data = d.data();
+    return {
+      id: d.id,
+      name: data.name || data.email || "Unknown",
+      email: data.email || "",
+      role: data.role || "user",
+      loyaltyPoints: data.loyaltyPoints || 0,
+      totalCoinsEarned: data.totalCoinsEarned || 0,
+      totalReferrals: data.totalReferrals || 0,
+      totalPackages: data.totalPackages || 0,
+      totalSpend: data.totalSpend || 0,
+      tier: data.tier || "Hope",
+      annualOmniaSpend: data.annualOmniaSpend || data.totalSpend || 0,
+      travelFamily: data.travelFamily || "",
+      phone: data.phone || "",
+      referralCode: data.referralCode || "",
+      createdAt: data.createdAt || null,
+      updatedAt: data.updatedAt || null,
+    };
+  };
+
+  // Primary query: ordered by createdAt desc (requires Firestore index in production).
   try {
     const snap = await getDocs(query(collection(db, "users"), orderBy("createdAt", "desc")));
     const users: FirestoreUser[] = [];
-    snap.forEach((d: any) => {
-      const data = d.data();
-      users.push({
-        id: d.id,
-        name: data.name || data.email || "Unknown",
-        email: data.email || "",
-        role: data.role || "user",
-        loyaltyPoints: data.loyaltyPoints || 0,
-        totalCoinsEarned: data.totalCoinsEarned || 0,
-        totalReferrals: data.totalReferrals || 0,
-        totalPackages: data.totalPackages || 0,
-        totalSpend: data.totalSpend || 0,
-        tier: data.tier || "Hope",
-        annualOmniaSpend: data.annualOmniaSpend || data.totalSpend || 0,
-        travelFamily: data.travelFamily || "",
-        phone: data.phone || "",
-        referralCode: data.referralCode || "",
-        createdAt: data.createdAt || null,
-        updatedAt: data.updatedAt || null,
-      });
-    });
+    snap.forEach((d: any) => users.push(mapDoc(d)));
     return users;
-  } catch (error: any) {
-    const msg = error?.message || "";
-    const code = error?.code || "";
-    if (
-      msg.includes("insufficient permissions") ||
-      msg.includes("permission-denied") ||
-      code === "permission-denied" ||
-      msg.includes("does not exist")
-    ) {
+  } catch (primaryError: any) {
+    // PRODUCTION FIX: the original catch block swallowed ALL errors silently
+    // and returned [], causing the Admin page to show zero users whenever
+    // the Firestore index on createdAt was missing or the query failed.
+    // Now we log the real error and fall back to an unordered query so
+    // users remain visible even when the index is absent.
+    console.error(
+      "[users.service] Ordered query failed (code:", primaryError?.code,
+      "message:", primaryError?.message,
+      ") — falling back to unordered query"
+    );
+
+    try {
+      const snap = await getDocs(collection(db, "users"));
+      const users: FirestoreUser[] = [];
+      snap.forEach((d: any) => users.push(mapDoc(d)));
+      return users;
+    } catch (fallbackError: any) {
+      console.error(
+        "[users.service] Fallback unordered query also failed (code:",
+        fallbackError?.code, "message:", fallbackError?.message, ")"
+      );
       return [];
     }
-    return [];
   }
 }
+
 
 export async function updateUserRole(
   userId: string,
