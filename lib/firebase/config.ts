@@ -67,6 +67,8 @@ function getFirebaseServices(): Promise<FirebaseServices | null> {
         signInWithPopup:               (a: any, provider: any)             => authMod.signInWithPopup(a, provider),
         signOut:                       (a: any)                            => authMod.signOut(a),
         updateProfile:                 (user: any, profile: any)           => authMod.updateProfile(user, profile),
+        sendEmailVerification:         (user: any)                         => authMod.sendEmailVerification(user),
+        sendPasswordResetEmail:        (a: any, email: string)             => authMod.sendPasswordResetEmail(a, email),
         GoogleAuthProvider:   authMod.GoogleAuthProvider,
         FacebookAuthProvider: (authMod as any).FacebookAuthProvider,
       }

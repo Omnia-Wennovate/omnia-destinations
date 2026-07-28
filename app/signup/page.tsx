@@ -22,6 +22,7 @@ export default function SignupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [socialLoading, setSocialLoading] = useState<string | null>(null)
+  const [signupSuccess, setSignupSuccess] = useState(false)
   const { isAuthenticated, isInitialized, user, setLoading, setError, setUser } = useAuthStore()
 
   // Redirect if already authenticated
@@ -122,6 +123,7 @@ const onSubmit = async (data: SignupFormData) => {
     const {
       createUserWithEmailAndPassword,
       updateProfile,
+      sendEmailVerification,
       signOut,
     } = modules.auth
 
@@ -144,6 +146,16 @@ const onSubmit = async (data: SignupFormData) => {
     await updateProfile(firebaseUser, {
       displayName: fullName,
     })
+
+    // Send Firebase email verification
+    try {
+      await sendEmailVerification(firebaseUser)
+    } catch (verifyErr: any) {
+      // Non-fatal — account is still created, user can resend from login
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Verification email send failed:', verifyErr)
+      }
+    }
 
     const db = await getFirebaseDb()
 
@@ -227,9 +239,7 @@ const onSubmit = async (data: SignupFormData) => {
     // Clean up referral code from localStorage after successful signup
     localStorage.removeItem('refCode')
 
-    alert('Account created successfully. Please login.')
-
-    router.push('/login')
+    setSignupSuccess(true)
   } catch (error: any) {
     // Only log the code in development — never expose raw error objects in production
     if (process.env.NODE_ENV === 'development') {
@@ -301,6 +311,27 @@ const onSubmit = async (data: SignupFormData) => {
             <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-3">Create Account</h1>
             <p className="text-muted-foreground text-lg">Join us and explore the world like never before</p>
           </div>
+
+          {/* Signup Success Message */}
+          {signupSuccess && (
+            <div className="mb-6 p-4 rounded-lg bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Account created successfully!</p>
+                  <p className="text-sm mt-1">Please check your email and verify your account before signing in.</p>
+                  <Link
+                    href="/login"
+                    className="inline-block mt-3 text-sm text-primary hover:text-primary/80 font-semibold transition-colors"
+                  >
+                    Go to Sign In →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit, () => {})} className="space-y-5">

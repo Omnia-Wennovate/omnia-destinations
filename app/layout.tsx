@@ -10,6 +10,7 @@ import { WhatsAppFloat } from '@/components/whatsapp-float'
 import { OmniaChatbot } from '@/components/omnia-chatbot'
 import { PaymentStatusPopup } from '@/components/payment-status-popup'
 import AutoLogout from '@/components/auto-logout'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 const poppins = Poppins({
@@ -42,6 +43,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className="light">
       <body className={`${poppins.variable} font-sans antialiased bg-background text-foreground`}>
         <Providers>
+          <Toaster />
           <AutoLogout />
           <div className="flex min-h-screen flex-col">
             <Header />

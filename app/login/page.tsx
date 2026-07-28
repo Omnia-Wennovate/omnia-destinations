@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { sendPasswordResetEmail } from "firebase/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -55,6 +54,21 @@ export default function LoginPage() {
   const [showForgot, setShowForgot] = useState(false)
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState<string | null>(null)
+  const [resetLoading, setResetLoading] = useState(false)
+
+  // Email verification state
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendSuccess, setResendSuccess] = useState(false)
+
+  // Cooldown timer for resend verification
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
 
   const handleSocialAuth = async (provider: 'google' | 'apple') => {
     try {
@@ -93,21 +107,86 @@ export default function LoginPage() {
 
   const handleResetPassword = async () => {
     try {
+      setResetLoading(true)
+      setResetMessage(null)
       const auth = await getFirebaseAuth()
-      if (!auth) {
+      const modules = await getFirebaseModules()
+      if (!auth || !modules.auth) {
         setResetMessage("Firebase not available")
         return
       }
-      await sendPasswordResetEmail(auth, resetEmail)
-      setResetMessage("Password reset email sent. Check your inbox or spam. search for nonreply@firebaseapp.com")
+      await modules.auth.sendPasswordResetEmail(auth, resetEmail)
+      setResetMessage("Password reset email sent. Check your inbox or spam.")
     } catch (error: any) {
       if (error.code === "auth/user-not-found") {
         setResetMessage("No account found with this email.")
       } else if (error.code === "auth/invalid-email") {
         setResetMessage("Invalid email address.")
+      } else if (error.code === "auth/too-many-requests") {
+        setResetMessage("Too many requests. Please wait a moment and try again.")
       } else {
-        setResetMessage("Failed to send reset email.")
+        setResetMessage("Failed to send reset email. Please try again.")
       }
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    try {
+      setResendLoading(true)
+      setResendSuccess(false)
+
+      const auth = await getFirebaseAuth()
+      const modules = await getFirebaseModules()
+      if (!auth || !modules.auth) {
+        setFormError('Authentication service not available.')
+        return
+      }
+
+      // Temporarily sign in to get currentUser, then send verification and sign out
+      const { signInWithEmailAndPassword, sendEmailVerification, signOut } = modules.auth
+
+      // We need the password — but we don't have it at this point.
+      // Instead, use the cached auth.currentUser if available, or prompt differently.
+      // Since we just signed them out, we need to sign in again briefly.
+      // The email is stored in unverifiedEmail but we don't have the password.
+      // Firebase allows sending verification to currentUser right after sign-in.
+      // Since we signed them out, we'll use a different approach:
+      // We'll sign in silently, send the email, then sign out.
+      // But we don't have the password stored. So instead, let's check if currentUser exists.
+
+      const currentUser = auth.currentUser
+      if (currentUser) {
+        await currentUser.reload()
+        if (currentUser.emailVerified) {
+          setNeedsVerification(false)
+          setFormError(null)
+          setResendSuccess(false)
+          return
+        }
+        await sendEmailVerification(currentUser)
+      } else {
+        // No current user — this means they were already signed out.
+        // We cannot send verification without being signed in.
+        // Show a message guiding the user.
+        setFormError('Please try logging in again to resend the verification email.')
+        setResendLoading(false)
+        return
+      }
+
+      await signOut(auth)
+
+      setResendSuccess(true)
+      setResendCooldown(60)
+    } catch (error: any) {
+      if (error?.code === 'auth/too-many-requests') {
+        setFormError('Too many requests. Please wait a few minutes before trying again.')
+      } else {
+        setFormError('Failed to resend verification email. Please try again.')
+      }
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -116,6 +195,7 @@ export default function LoginPage() {
       setLoading(true)
       setError(null)
       setFormError(null)
+      setNeedsVerification(false)
 
       const auth = await getFirebaseAuth()
       const db = await getFirebaseDb()
@@ -126,7 +206,7 @@ export default function LoginPage() {
         return
       }
 
-      const { signInWithEmailAndPassword } = modules.auth
+      const { signInWithEmailAndPassword, signOut } = modules.auth
       const { doc, getDoc } = modules.firestore
 
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password)
@@ -137,9 +217,28 @@ export default function LoginPage() {
         return
       }
 
+      // Check if user is an admin (admins are exempt from email verification)
       const adminRef = doc(db, "admins", firebaseUser.uid)
       const adminSnap = await getDoc(adminRef)
-      const role = adminSnap.exists() ? "ADMIN" : "USER"
+      const isAdmin = adminSnap.exists()
+
+      // For non-admin users, enforce email verification
+      if (!isAdmin) {
+        // Always reload to get the latest emailVerified status from Firebase server
+        await firebaseUser.reload()
+
+        if (!firebaseUser.emailVerified) {
+          // User email is not verified — block login
+          setUnverifiedEmail(data.email)
+          setNeedsVerification(true)
+          // Don't sign out immediately — keep currentUser so resend works
+          // signOut will happen in handleResendVerification after sending
+          setFormError(null)
+          return
+        }
+      }
+
+      const role = isAdmin ? "ADMIN" : "USER"
       const name = firebaseUser.displayName || ""
 
       setUser({
@@ -195,6 +294,43 @@ export default function LoginPage() {
             <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-3">Welcome Back</h1>
             <p className="text-muted-foreground text-lg">Sign in to continue your journey with us</p>
           </div>
+
+          {/* Email Verification Needed */}
+          {needsVerification && (
+            <div className="mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold text-sm text-amber-700 dark:text-amber-400">
+                    Email verification required
+                  </p>
+                  <p className="text-sm text-amber-600 dark:text-amber-400/80 mt-1">
+                    Please verify your email address before signing in. Check your inbox for a verification link.
+                  </p>
+                </div>
+
+                {resendSuccess && (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    Verification email sent! Please check your inbox.
+                  </p>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resendLoading || resendCooldown > 0}
+                  onClick={handleResendVerification}
+                  className="text-sm"
+                >
+                  {resendLoading
+                    ? 'Sending...'
+                    : resendCooldown > 0
+                      ? `Resend in ${resendCooldown}s`
+                      : 'Resend Verification Email'}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -400,8 +536,8 @@ export default function LoginPage() {
                 Cancel
               </Button>
 
-              <Button onClick={handleResetPassword}>
-                Send Reset Link
+              <Button onClick={handleResetPassword} disabled={resetLoading || !resetEmail.trim()}>
+                {resetLoading ? 'Sending...' : 'Send Reset Link'}
               </Button>
             </div>
 
