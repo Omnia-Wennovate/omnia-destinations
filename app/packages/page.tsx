@@ -65,37 +65,47 @@ export default function PackagesPage() {
     fetchPackages()
   }, [])
 
+  // IDs of packages shown on the Home page only — excluded from this page
+  const HOME_ONLY_IDS = new Set(['1', '2', '3'])
+
   // Combine Firestore packages with static fallback data
   const allPackages = useMemo(() => {
-    const firestoreConverted = firestorePackages.map((pkg) => ({
-      id: pkg.id,
-      slug: pkg.slug || pkg.id,
-      title: pkg.title,
-      location: pkg.location,
-      image: pkg.featuredImageURL || pkg.images?.[0] || "/images/placeholder.jpg",
-      duration: `${pkg.duration} Days`,
-      singlePrice: Number(pkg.singlePrice) || 0,
-      sharingPrice: Number(pkg.sharingPrice) || 0,
-      rating: 4.5,
-      availableFrom: pkg.availableFrom,
-      availableUntil: pkg.availableUntil,
-    }))
+    const firestoreConverted = firestorePackages
+      // Remove the 3 Home-only static packages so they don't appear here
+      .filter((pkg) => !HOME_ONLY_IDS.has(pkg.id))
+      .map((pkg) => ({
+        id: pkg.id,
+        slug: pkg.slug || pkg.id,
+        title: pkg.title,
+        location: pkg.location,
+        image: pkg.featuredImageURL || pkg.images?.[0] || "/images/placeholder.jpg",
+        duration: `${pkg.duration} Days`,
+        singlePrice: Number(pkg.singlePrice) || 0,
+        sharingPrice: Number(pkg.sharingPrice) || 0,
+        rating: 4.5,
+        availableFrom: pkg.availableFrom,
+        availableUntil: pkg.availableUntil,
+      }))
 
     if (firestoreConverted.length > 0) {
       return firestoreConverted
     }
 
-    return PACKAGES.map((pkg) => ({
-      id: pkg.id,
-      slug: pkg.id,
-      title: pkg.title,
-      location: pkg.location,
-      image: pkg.image,
-      duration: pkg.duration,
-      singlePrice: pkg.singlePrice || 0,
-      sharingPrice: pkg.sharingPrice || 0,
-      rating: pkg.rating,
-    }))
+    return PACKAGES
+      // Remove the 3 Home-only static packages from the fallback path too
+      .filter((pkg) => !HOME_ONLY_IDS.has(pkg.id))
+      .map((pkg) => ({
+        id: pkg.id,
+        slug: pkg.id,
+        title: pkg.title,
+        location: pkg.location,
+        image: pkg.image,
+        duration: pkg.duration,
+        singlePrice: pkg.singlePrice || 0,
+        sharingPrice: pkg.sharingPrice || 0,
+        hidePricing: pkg.hidePricing,
+        rating: pkg.rating,
+      }))
   }, [firestorePackages])
 
   // Filter and sort packages

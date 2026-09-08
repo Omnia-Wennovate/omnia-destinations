@@ -16,6 +16,7 @@ interface PackageCardProps {
     rating: number
     availableFrom?: string
     availableUntil?: string
+    hidePricing?: boolean
   }
   redirectBookNow?: string
 }
@@ -23,7 +24,7 @@ interface PackageCardProps {
 export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps) {
   if (!pkg) return null
 
-  const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil } = pkg
+  const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil, hidePricing } = pkg
   const linkSlug = slug || id
 
   const formatAvailability = (start?: string, end?: string) => {
@@ -100,16 +101,22 @@ export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps)
 
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <div className="flex items-baseline gap-1">
-              <span className="text-xs text-muted-foreground">Single:</span>
-              <span className="text-lg font-bold text-primary">{singlePrice.toLocaleString()} ETB</span>
-              <span className="text-[10px] text-muted-foreground">/person</span>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-xs text-muted-foreground">Sharing:</span>
-              <span className="text-lg font-bold text-primary">{sharingPrice.toLocaleString()} ETB</span>
-              <span className="text-[10px] text-muted-foreground">/person</span>
-            </div>
+            {hidePricing ? (
+              <span className="text-sm text-muted-foreground italic">Contact us for pricing</span>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-muted-foreground">Single:</span>
+                  <span className="text-lg font-bold text-primary">{singlePrice.toLocaleString()} ETB</span>
+                  <span className="text-[10px] text-muted-foreground">/person</span>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-muted-foreground">Sharing:</span>
+                  <span className="text-lg font-bold text-primary">{sharingPrice.toLocaleString()} ETB</span>
+                  <span className="text-[10px] text-muted-foreground">/person</span>
+                </div>
+              </>
+            )}
           </div>
 
           <BookNowButton

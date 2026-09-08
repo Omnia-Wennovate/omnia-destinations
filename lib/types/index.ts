@@ -16,6 +16,7 @@ export interface Package {
   availableFrom?: string
   availableUntil?: string
   durationDays?: number
+  hidePricing?: boolean
   // Extended details for product page
   description?: string
   highlights?: string[]

@@ -2,6 +2,32 @@ import { getFirebaseDb, getFirebaseStorage, getFirebaseModules } from "@/lib/fir
 import { PACKAGES } from "@/lib/data/packages";
 import { TOURS } from "@/lib/data/tours";
 
+// ── Static-only packages ───────────────────────────────────────────────────
+// These three packages are served exclusively from hardcoded static data.
+// Firestore is never consulted for them (reads or writes).
+const STATIC_PACKAGE_IDS = new Set(['1', '2', '3']);
+
+function toPackageData(staticPkg: (typeof PACKAGES)[number]): PackageData {
+  return {
+    id: staticPkg.id,
+    title: staticPkg.title,
+    slug: staticPkg.id,
+    shortDescription: staticPkg.description || '',
+    fullDescription: staticPkg.description || '',
+    singlePrice: staticPkg.singlePrice,
+    sharingPrice: staticPkg.sharingPrice,
+    duration: parseInt(staticPkg.duration.toString()) || 1,
+    location: staticPkg.location,
+    category: '',
+    includedServices: (staticPkg as any).included || [],
+    excludedServices: (staticPkg as any).excluded || [],
+    status: 'published',
+    featuredImageURL: staticPkg.image,
+    galleryImageURLs: (staticPkg as any).gallery || [],
+    videoURL: (staticPkg as any).videoUrl || '',
+  };
+}
+
 export interface PackageData {
   id: string;
   title: string;
@@ -188,9 +214,26 @@ export async function getAllPackages(): Promise<PackageData[]> {
 
 // Fetch only published packages with minimal fields (no fullDescription, no videoURL)
 export async function getPublishedPackages(): Promise<PackageListItem[]> {
+  // Always include the three static packages, served from hardcoded data only.
+  const staticItems: PackageListItem[] = PACKAGES
+    .filter((p) => STATIC_PACKAGE_IDS.has(p.id))
+    .map((p) => ({
+      id: p.id,
+      slug: p.id,
+      title: p.title,
+      shortDescription: (p as any).description || '',
+      singlePrice: p.singlePrice,
+      sharingPrice: p.sharingPrice,
+      duration: parseInt(p.duration.toString()) || 1,
+      featuredImageURL: p.image,
+      location: p.location,
+      category: '',
+      images: (p as any).gallery || [],
+    }));
+
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
-  if (!db || !modules.firestore) return [];
+  if (!db || !modules.firestore) return staticItems;
 
   const { collection, query, where, orderBy, getDocs } = modules.firestore;
 
@@ -208,33 +251,48 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
     snap.docs.forEach((doc: { id: any; data: () => any; }) => {
       console.log("📦 Package:", doc.id, doc.data());
     });
-    return snap.docs.map((d: any) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        title: data.title,
-        slug: data.slug,
-        shortDescription: data.shortDescription,
-        singlePrice: data.singlePrice || data.price || 0,
-        sharingPrice: data.sharingPrice || data.price || 0,
-        duration: data.duration,
-        featuredImageURL: data.featuredImageURL,
-        location: data.location,
-        category: data.category,
-        availableFrom: data.availableFrom,
-        availableUntil: data.availableUntil,
-      } as PackageListItem;
-    });
+
+    // Exclude any Firestore doc whose id or slug collides with a static package.
+    const firestoreItems = snap.docs
+      .filter((d: any) => {
+        const data = d.data();
+        return !STATIC_PACKAGE_IDS.has(d.id) && !STATIC_PACKAGE_IDS.has(data.slug);
+      })
+      .map((d: any) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          title: data.title,
+          slug: data.slug,
+          shortDescription: data.shortDescription,
+          singlePrice: data.singlePrice || data.price || 0,
+          sharingPrice: data.sharingPrice || data.price || 0,
+          duration: data.duration,
+          featuredImageURL: data.featuredImageURL,
+          location: data.location,
+          category: data.category,
+          availableFrom: data.availableFrom,
+          availableUntil: data.availableUntil,
+          images: data.galleryImageURLs || [],
+        } as PackageListItem;
+      });
+
+    // Static packages always come first; Firestore-only packages appended after.
+    return [...staticItems, ...firestoreItems];
   } catch (error: any) {
     const code = error?.code || "";
     const msg = error?.message || "";
-    if (code === "permission-denied" || msg.includes("insufficient permissions")) return [];
+    if (code === "permission-denied" || msg.includes("insufficient permissions")) return staticItems;
     throw error;
   }
 }
 
 // Fetch full package by ID (used on detail page)
 export async function getPackageById(packageId: string): Promise<PackageData | null> {
+  // Short-circuit: always return static data for the three hardcoded packages.
+  const staticPkgEarly = PACKAGES.find((p) => STATIC_PACKAGE_IDS.has(p.id) && p.id === packageId);
+  if (staticPkgEarly) return toPackageData(staticPkgEarly);
+
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
 
@@ -266,26 +324,7 @@ export async function getPackageById(packageId: string): Promise<PackageData | n
 
   // Fallback to static packages
   const staticPkg = PACKAGES.find((p) => p.id === packageId);
-  if (staticPkg) {
-    return {
-      id: staticPkg.id,
-      title: staticPkg.title,
-      slug: staticPkg.id,
-      shortDescription: staticPkg.description || '',
-      fullDescription: staticPkg.description || '',
-      singlePrice: staticPkg.singlePrice,
-      sharingPrice: staticPkg.sharingPrice,
-      duration: parseInt(staticPkg.duration.toString()) || 1,
-      location: staticPkg.location,
-      category: '',
-      includedServices: staticPkg.included || [],
-      excludedServices: staticPkg.excluded || [],
-      status: 'published',
-      featuredImageURL: staticPkg.image,
-      galleryImageURLs: staticPkg.gallery || [],
-      videoURL: staticPkg.videoUrl || '',
-    };
-  }
+  if (staticPkg) return toPackageData(staticPkg);
 
   // Fallback to static tours
   const staticTour = TOURS.find((t) => t.id === packageId);
@@ -294,19 +333,19 @@ export async function getPackageById(packageId: string): Promise<PackageData | n
       id: staticTour.id,
       title: staticTour.title,
       slug: staticTour.id,
-      shortDescription: staticTour.description || '',
-      fullDescription: staticTour.description || '',
-      singlePrice: staticTour.price || 0,
-      sharingPrice: staticTour.price || 0,
+      shortDescription: (staticTour as any).description || '',
+      fullDescription: (staticTour as any).description || '',
+      singlePrice: (staticTour as any).price || 0,
+      sharingPrice: (staticTour as any).price || 0,
       duration: parseInt(staticTour.duration.toString()) || 1,
       location: staticTour.location,
       category: '',
-      includedServices: staticTour.included || [],
-      excludedServices: staticTour.excluded || [],
+      includedServices: (staticTour as any).included || [],
+      excludedServices: (staticTour as any).excluded || [],
       status: 'published',
       featuredImageURL: staticTour.image,
-      galleryImageURLs: staticTour.gallery || [],
-      videoURL: staticTour.videoUrl || '',
+      galleryImageURLs: (staticTour as any).gallery || [],
+      videoURL: (staticTour as any).videoUrl || '',
     };
   }
 
@@ -315,6 +354,18 @@ export async function getPackageById(packageId: string): Promise<PackageData | n
 
 // Fetch full package by slug (used on detail page - lazy loaded)
 export async function getPackageBySlug(rawSlug: string): Promise<PackageData | null> {
+  const normalizedSlug = rawSlug.toLowerCase().trim();
+
+  // Short-circuit: always return static data for the three hardcoded packages.
+  // Match by id ('1','2','3') since those are used as slugs for static packages.
+  const staticPkgEarly = PACKAGES.find(
+    (p) => STATIC_PACKAGE_IDS.has(p.id) && (p.id === normalizedSlug)
+  );
+  if (staticPkgEarly) {
+    console.log("✅ Serving static package (no Firestore):", staticPkgEarly.title);
+    return toPackageData(staticPkgEarly);
+  }
+
   const db = await getFirebaseDb();
   const modules = await getFirebaseModules();
   if (!db || !modules.firestore) {
@@ -324,7 +375,6 @@ export async function getPackageBySlug(rawSlug: string): Promise<PackageData | n
 
   const { doc, getDoc, collection, query, where, limit, getDocs } = modules.firestore;
   
-  const normalizedSlug = rawSlug.toLowerCase().trim();
   console.log("URL SLUG:", rawSlug);
   console.log("QUERYING FOR:", normalizedSlug);
 

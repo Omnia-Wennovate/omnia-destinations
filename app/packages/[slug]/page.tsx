@@ -18,11 +18,40 @@ export default function PackageDetailPage() {
 
   // All hooks must be declared before any conditional returns.
   useEffect(() => {
+    // IDs of packages that are always served from static hardcoded data.
+    const STATIC_PACKAGE_IDS = new Set(['1', '2', '3'])
 
     async function fetchPackage() {
       try {
         setLoading(true)
         console.log("URL SLUG:", slug)
+
+        // 🔹 Short-circuit for hardcoded static packages — no Firestore call.
+        if (STATIC_PACKAGE_IDS.has(slug)) {
+          const staticPkg = PACKAGES.find((p) => p.id === slug)
+          if (staticPkg) {
+            console.log("✅ Serving static package (no Firestore):", staticPkg.title)
+            setPackageData({
+              id: staticPkg.id,
+              title: staticPkg.title,
+              slug: staticPkg.id,
+              shortDescription: staticPkg.description || '',
+              fullDescription: staticPkg.description || '',
+              singlePrice: staticPkg.singlePrice,
+              sharingPrice: staticPkg.sharingPrice,
+              duration: parseInt(staticPkg.duration) || 7,
+              location: staticPkg.location,
+              category: '',
+              includedServices: (staticPkg as any).included || [],
+              excludedServices: (staticPkg as any).excluded || [],
+              status: 'published',
+              featuredImageURL: staticPkg.image,
+              galleryImageURLs: (staticPkg as any).gallery || [],
+              videoURL: (staticPkg as any).videoUrl || '',
+            })
+            return
+          }
+        }
 
         // 🔹 Fetch from Firestore
         const firestorePkg = await getPackageBySlug(slug)
@@ -49,12 +78,12 @@ export default function PackageDetailPage() {
             duration: parseInt(staticPkg.duration) || 7,
             location: staticPkg.location,
             category: '',
-            includedServices: staticPkg.included || [],
-            excludedServices: staticPkg.excluded || [],
+            includedServices: (staticPkg as any).included || [],
+            excludedServices: (staticPkg as any).excluded || [],
             status: 'published',
             featuredImageURL: staticPkg.image,
-            galleryImageURLs: staticPkg.gallery || [],
-            videoURL: staticPkg.videoUrl || '',
+            galleryImageURLs: (staticPkg as any).gallery || [],
+            videoURL: (staticPkg as any).videoUrl || '',
           })
         } else {
           console.log("❌ Package not found for slug:", slug)

@@ -9,6 +9,7 @@ export const PACKAGES: Package[] = [
     duration: '7 Days',
     singlePrice: 2500,
     sharingPrice: 2000,
+    hidePricing: true,
     rating: 4.9,
     reviews: 856,
     groupSize: 'Private or Group',
@@ -163,6 +164,7 @@ export const PACKAGES: Package[] = [
     duration: '5 Days',
     singlePrice: 1800,
     sharingPrice: 1500,
+    hidePricing: true,
     rating: 4.8,
   },
   {
@@ -173,6 +175,7 @@ export const PACKAGES: Package[] = [
     duration: '4 Days',
     singlePrice: 1500,
     sharingPrice: 1200,
+    hidePricing: true,
     rating: 4.7,
   },
 ]
