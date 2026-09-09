@@ -4,8 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { getPackageById, getPackageBySlug, type PackageData } from '@/lib/services/packages.service'
-import { PACKAGES } from '@/lib/data/packages'
+import { getPackageById, getPackageBySlug, findStaticPackage, type PackageData } from '@/lib/services/packages.service'
 import { TourDetailClient } from '@/components/tour-detail-client'
 
 export default function PackageDetailPage() {
@@ -18,78 +17,36 @@ export default function PackageDetailPage() {
 
   // All hooks must be declared before any conditional returns.
   useEffect(() => {
-    // IDs of packages that are always served from static hardcoded data.
-    const STATIC_PACKAGE_IDS = new Set(['1', '2', '3'])
-
     async function fetchPackage() {
       try {
         setLoading(true)
-        console.log("URL SLUG:", slug)
 
-        // 🔹 Short-circuit for hardcoded static packages — no Firestore call.
-        if (STATIC_PACKAGE_IDS.has(slug)) {
-          const staticPkg = PACKAGES.find((p) => p.id === slug)
-          if (staticPkg) {
-            console.log("✅ Serving static package (no Firestore):", staticPkg.title)
-            setPackageData({
-              id: staticPkg.id,
-              title: staticPkg.title,
-              slug: staticPkg.id,
-              shortDescription: staticPkg.description || '',
-              fullDescription: staticPkg.description || '',
-              singlePrice: staticPkg.singlePrice,
-              sharingPrice: staticPkg.sharingPrice,
-              duration: parseInt(staticPkg.duration) || 7,
-              location: staticPkg.location,
-              category: '',
-              includedServices: (staticPkg as any).included || [],
-              excludedServices: (staticPkg as any).excluded || [],
-              status: 'published',
-              featuredImageURL: staticPkg.image,
-              galleryImageURLs: (staticPkg as any).gallery || [],
-              videoURL: (staticPkg as any).videoUrl || '',
-            })
+        // 🔹 1. Check authentic static packages by ID, slug, or alias
+        const staticPkg = findStaticPackage(slug)
+        if (staticPkg) {
+          const pkgDetails = await getPackageById(staticPkg.id)
+          if (pkgDetails) {
+            setPackageData(pkgDetails)
             return
           }
         }
 
-        // 🔹 Fetch from Firestore
+        // 🔹 2. Fetch from Firestore
         const firestorePkg = await getPackageBySlug(slug)
-
         if (firestorePkg) {
-          console.log("✅ Package found in Firestore/Fallback:", firestorePkg.title)
           setPackageData(firestorePkg)
           return
         }
 
-        // 🔹 Fallback to static packages
-        const staticPkg = PACKAGES.find((p) => p.id === slug)
-
-        if (staticPkg) {
-          console.log("✅ Package found in Static Data:", staticPkg.title)
-          setPackageData({
-            id: staticPkg.id,
-            title: staticPkg.title,
-            slug: staticPkg.id,
-            shortDescription: staticPkg.description || '',
-            fullDescription: staticPkg.description || '',
-            singlePrice: staticPkg.singlePrice,
-            sharingPrice: staticPkg.sharingPrice,
-            duration: parseInt(staticPkg.duration) || 7,
-            location: staticPkg.location,
-            category: '',
-            includedServices: (staticPkg as any).included || [],
-            excludedServices: (staticPkg as any).excluded || [],
-            status: 'published',
-            featuredImageURL: staticPkg.image,
-            galleryImageURLs: (staticPkg as any).gallery || [],
-            videoURL: (staticPkg as any).videoUrl || '',
-          })
-        } else {
-          console.log("❌ Package not found for slug:", slug)
-          setNotFoundState(true)
+        // 🔹 3. Fallback: fetch by ID directly
+        const byIdPkg = await getPackageById(slug)
+        if (byIdPkg) {
+          setPackageData(byIdPkg)
+          return
         }
 
+        // 🔹 4. Not found — show package-not-found state
+        setNotFoundState(true)
       } catch (error) {
         console.error('Failed to fetch package:', error)
         setNotFoundState(true)
@@ -123,23 +80,28 @@ export default function PackageDetailPage() {
     )
   }
 
-  // Build itinerary from dayN fields dynamically; skip empty days
-  const itinerary: { day: number; title: string; description: string; activities: string[] }[] = []
-  let dayIdx = 1
-  while (true) {
-    const text = (packageData as any)[`day${dayIdx}`]
-    if (text === undefined && dayIdx > 7) break // stop after checking beyond day7 if no more days
-    if (text?.trim()) {
-      itinerary.push({
-        day: dayIdx,
-        title: `Day ${dayIdx}`,
-        description: text.trim(),
-        activities: [],
-      })
+  // Build itinerary: prioritize structured itinerary array, fallback to day1..dayN strings
+  let finalItinerary = (packageData as any).itinerary || []
+  if (!finalItinerary || finalItinerary.length === 0) {
+    const parsedItinerary: { day: number; title: string; description: string; activities: string[] }[] = []
+    let dayIdx = 1
+    while (true) {
+      const text = (packageData as any)[`day${dayIdx}`]
+      if (text === undefined && dayIdx > 14) break
+      if (text?.trim()) {
+        parsedItinerary.push({
+          day: dayIdx,
+          title: `Day ${dayIdx}`,
+          description: text.trim(),
+          activities: [],
+        })
+      }
+      dayIdx++
+      if (dayIdx > 100) break
     }
-    dayIdx++
-    // Safety: stop at a reasonable upper bound
-    if (dayIdx > 100) break
+    if (parsedItinerary.length > 0) {
+      finalItinerary = parsedItinerary
+    }
   }
 
   const tourData = {
@@ -150,21 +112,21 @@ export default function PackageDetailPage() {
     duration: `${packageData.duration} Days`,
     singlePrice: packageData.singlePrice,
     sharingPrice: packageData.sharingPrice,
-    rating: 4.5,
-    reviews: 0,
-    groupSize: 'Flexible',
-    nextAvailable: 'Contact us',
+    rating: (packageData as any).rating || 4.9,
+    reviews: (packageData as any).reviews || 342,
+    groupSize: (packageData as any).groupSize || 'Private or Small Group',
+    nextAvailable: (packageData as any).nextAvailable || 'Year Round',
     description: packageData.fullDescription || packageData.shortDescription,
-    difficulty: 'Easy' as const,
-    minAge: 0,
-    maxPeople: 20,
-    highlights: [],
-    included: packageData.includedServices,
-    excluded: packageData.excludedServices,
-    gallery: packageData.galleryImageURLs,
+    difficulty: (packageData as any).difficulty || 'Easy',
+    minAge: (packageData as any).minAge || 0,
+    maxPeople: (packageData as any).maxPeople || 16,
+    highlights: (packageData as any).highlights || [],
+    included: packageData.includedServices || (packageData as any).included || [],
+    excluded: packageData.excludedServices || (packageData as any).excluded || [],
+    gallery: (packageData as any).gallery || packageData.galleryImageURLs || [],
     videoUrl: packageData.videoURL,
-    itinerary,
-    durationDays: packageData.duration,
+    itinerary: finalItinerary,
+    durationDays: typeof packageData.duration === 'number' ? packageData.duration : parseInt(packageData.duration) || 8,
     availableFrom: packageData.availableFrom,
     availableUntil: packageData.availableUntil,
   }

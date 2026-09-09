@@ -5,6 +5,7 @@ export interface NavLink {
 
 export interface Package {
   id: string
+  slug?: string
   title: string
   location: string
   image: string

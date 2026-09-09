@@ -388,7 +388,7 @@ export default function CreatePackagePage() {
                   id="title"
                   value={title}
                   onChange={(e) => handleTitleChange(e.target.value)}
-                  placeholder="e.g., Maldives Paradise"
+                  placeholder="e.g., Mombasa & Zanzibar"
                 />
               </div>
 
@@ -398,7 +398,7 @@ export default function CreatePackagePage() {
                   id="slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="e.g., maldives-paradise"
+                  placeholder="e.g., mombasa-zanzibar"
                 />
               </div>
 
@@ -722,7 +722,7 @@ export default function CreatePackagePage() {
                   id="location"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g., Maldives"
+                  placeholder="e.g., Kenya & Tanzania"
                 />
               </div>
 

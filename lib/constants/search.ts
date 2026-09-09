@@ -1,7 +1,7 @@
 export const DESTINATIONS = [
-  'Maldives',
-  'Italy',
-  'Singapore',
+  'Kenya',
+  'Tanzania',
+  'Indonesia',
   'Thailand',
   'Greece',
   'Japan',
