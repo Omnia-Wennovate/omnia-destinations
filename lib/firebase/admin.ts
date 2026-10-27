@@ -7,6 +7,7 @@
 
 import { getApps, initializeApp, cert, App } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
+import { getAuth, Auth } from "firebase-admin/auth";
 
 function getAdminApp(): App {
   const existing = getApps().find((a) => a.name === "admin-app");
@@ -32,6 +33,7 @@ function getAdminApp(): App {
   return initializeApp(
     {
       credential: cert({ projectId, clientEmail, privateKey }),
+      storageBucket: 'omnia-destination.firebasestorage.app',
     },
     "admin-app"
   );
@@ -39,4 +41,8 @@ function getAdminApp(): App {
 
 export function getAdminDb(): Firestore {
   return getFirestore(getAdminApp());
+}
+
+export function getAdminAuth(): Auth {
+  return getAuth(getAdminApp());
 }

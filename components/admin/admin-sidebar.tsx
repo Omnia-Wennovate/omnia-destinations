@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Mail,
+  ShoppingBag,
 } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -23,11 +25,13 @@ const navItems = [
   { label: 'Tours', href: '/admin/tours', icon: Package },
   { label: 'Packages', href: '/admin/packages', icon: Package },
   { label: 'Bookings', href: '/admin/bookings', icon: Calendar },
+  { label: 'Products', href: '/admin/products', icon: ShoppingBag },
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Newsletter', href: '/admin/newsletter', icon: Mail },
   { label: 'Rewards', href: '/admin/rewards', icon: Gift },
   { label: 'Settings', href: '/admin/settings', icon: Settings },
 ]
+
 
 interface AdminSidebarProps {
   collapsed: boolean

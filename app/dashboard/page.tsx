@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { getFirebaseAuth, getFirebaseDb, getFirebaseModules } from '@/lib/firebase/config'
 import { getUserBookings } from '@/lib/services/bookings.service'
 import { removeFromFavorites, type FavoritePackage } from '@/lib/services/favorites.service'
+import { removeProductFromFavorites, type FavoriteProduct } from '@/lib/services/products.service'
+import { MyProductOrders } from '@/components/my-product-orders'
 import {
   uploadPassportFile,
   savePassportData,
@@ -41,6 +43,7 @@ import {
   Upload,
   FileText,
   ExternalLink,
+  ShoppingBag,
 } from 'lucide-react'
 
 
@@ -280,6 +283,7 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [rewards, setRewards] = useState<Reward[]>([])
   const [favorites, setFavorites] = useState<FavoritePackage[]>([])
+  const [productFavorites, setProductFavorites] = useState<FavoriteProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
@@ -503,6 +507,38 @@ export default function DashboardPage() {
     return () => { if (unsubscribe) unsubscribe() }
   }, [isInitialized, isAuthenticated, user])
 
+  // Real-time listener: productFavorites
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated || !user) return
+    let unsubscribeProdFav: (() => void) | null = null
+
+    async function subscribeToProductFavorites() {
+      const db = await getFirebaseDb()
+      const modules = await getFirebaseModules()
+      if (!db || !modules.firestore) return
+
+      const { collection, onSnapshot } = modules.firestore
+      const favRef = collection(db, 'users', user!.id, 'productFavorites')
+
+      unsubscribeProdFav = onSnapshot(favRef, (snap: any) => {
+        const list: FavoriteProduct[] = []
+        snap.forEach((d: any) => list.push(d.data() as FavoriteProduct))
+        list.sort((a, b) => {
+          const timeA = a.addedAt?.toMillis?.() || 0
+          const timeB = b.addedAt?.toMillis?.() || 0
+          return timeB - timeA
+        })
+        setProductFavorites(list)
+      }, (err: any) => {
+        console.error('[Dashboard] productFavorites listener error:', err)
+        setProductFavorites([])
+      })
+    }
+
+    subscribeToProductFavorites()
+    return () => { if (unsubscribeProdFav) unsubscribeProdFav() }
+  }, [isInitialized, isAuthenticated, user])
+
   // Passport: load on mount
   useEffect(() => {
     if (!isInitialized || !isAuthenticated || !user) return
@@ -562,6 +598,15 @@ export default function DashboardPage() {
       await removeFromFavorites(user.id, packageId)
     } catch (error) {
       console.error('[Dashboard] Error removing favorite:', error)
+    }
+  }
+
+  const handleRemoveProductFavorite = async (productId: string) => {
+    if (!user) return
+    try {
+      await removeProductFromFavorites(user.id, productId)
+    } catch (error) {
+      console.error('[Dashboard] Error removing product favorite:', error)
     }
   }
 
@@ -1083,7 +1128,89 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
+            {/* Favorite Products Section */}
+            <Card className="border-border/50 mb-8">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                      <ShoppingBag className="h-5 w-5 text-primary" />
+                      Favorite Products
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      {productFavorites.length} saved product{productFavorites.length !== 1 ? 's' : ''}
+                    </CardDescription>
+                  </div>
+                  <Link href="/products">
+                    <Button variant="outline" size="sm" className="bg-transparent">Browse Shop</Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {productFavorites.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ShoppingBag className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                    <p className="text-muted-foreground font-medium">No product favorites yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Products you save will appear here</p>
+                    <Link href="/products"><Button className="mt-4">Explore Products</Button></Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {productFavorites.map((fav) => (
+                      <div key={fav.productId} className="group relative overflow-hidden rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 transition-colors">
+                        <div className="aspect-video w-full overflow-hidden relative">
+                          {fav.imageURL ? (
+                            <img
+                              src={fav.imageURL}
+                              alt={fav.name}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
+                              <ShoppingBag className="h-12 w-12 text-primary/30" />
+                            </div>
+                          )}
+                          <div className="absolute top-2 right-2">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveProductFavorite(fav.productId)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <h3 className="font-semibold text-foreground line-clamp-1">{fav.name}</h3>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Price</span>
+                            <span className="font-bold text-primary">{fav.price.toLocaleString()} ETB</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Deposit</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                              {Math.round(fav.price * 0.1).toLocaleString()} ETB
+                            </span>
+                          </div>
+                          <div className="mt-4">
+                            <Link href="/products" className="block">
+                              <Button className="w-full" variant="outline" size="sm">View in Shop</Button>
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Product Orders Section */}
+            {user && <MyProductOrders userId={user.id} />}
+
             {/* Bookings Section */}
+
             <Card className="border-border/50 mb-8">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">

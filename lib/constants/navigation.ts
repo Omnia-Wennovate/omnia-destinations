@@ -7,6 +7,8 @@ export const NAV_LINKS: NavLink[] = [
   { href: '/business-travel', label: 'Business Travel' },
   { href: '/about', label: 'About Us' },
   { href: '/contact', label: 'Contact Us' },
+  { href: '/products', label: 'Products' },
 ]
+
 
 export const CURRENCIES: Currency[] = ['ETB']

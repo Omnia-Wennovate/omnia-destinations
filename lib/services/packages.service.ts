@@ -127,6 +127,7 @@ export interface PackageListItem {
   category: string;
   availableFrom?: string;
   availableUntil?: string;
+  createdAt?: number | null; // ms — drives the "New" badge; absent on static packages
 }
 
 export interface CreatePackageData {
@@ -353,6 +354,7 @@ export async function getPublishedPackages(): Promise<PackageListItem[]> {
           availableFrom: data.availableFrom,
           availableUntil: data.availableUntil,
           images: data.galleryImageURLs || [],
+          createdAt: data.createdAt?.toMillis?.() ?? null,
         } as PackageListItem;
       });
 

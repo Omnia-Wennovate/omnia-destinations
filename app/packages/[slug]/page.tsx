@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { getPackageById, getPackageBySlug, findStaticPackage, type PackageData } from '@/lib/services/packages.service'
 import { TourDetailClient } from '@/components/tour-detail-client'
+import { recordView } from '@/lib/views'
 
 export default function PackageDetailPage() {
   const params = useParams()
@@ -59,6 +60,11 @@ export default function PackageDetailPage() {
       fetchPackage()
     }
   }, [slug])
+
+  // Count a view for visitors who land here directly (deduped with card views)
+  useEffect(() => {
+    if (packageData?.id) recordView('package', packageData.id)
+  }, [packageData?.id])
 
   if (loading) {
     return (

@@ -91,6 +91,7 @@ export default function PackagesPage() {
         rating: 4.9,
         availableFrom: pkg.availableFrom,
         availableUntil: pkg.availableUntil,
+        createdAt: pkg.createdAt ?? null,
       }))
 
     if (firestoreConverted.length > 0) {

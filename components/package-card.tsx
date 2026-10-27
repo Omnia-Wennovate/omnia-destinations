@@ -2,6 +2,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { MapPin, Clock, Star, Calendar } from "lucide-react"
 import { BookNowButton } from "@/components/book-now-button"
+import { NewBadge, ViewCountBadge } from "@/components/listing-badges"
 
 interface PackageCardProps {
   package: {
@@ -17,6 +18,7 @@ interface PackageCardProps {
     availableFrom?: string
     availableUntil?: string
     hidePricing?: boolean
+    createdAt?: number | null
   }
   redirectBookNow?: string
 }
@@ -24,7 +26,7 @@ interface PackageCardProps {
 export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps) {
   if (!pkg) return null
 
-  const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil, hidePricing } = pkg
+  const { id, slug, title, location, image, duration, singlePrice, sharingPrice, rating, availableFrom, availableUntil, hidePricing, createdAt } = pkg
   const linkSlug = slug || id
 
   const formatAvailability = (start?: string, end?: string) => {
@@ -71,6 +73,9 @@ export function PackageCard({ package: pkg, redirectBookNow }: PackageCardProps)
           <Star className="h-4 w-4 fill-primary text-primary" />
           <span className="text-foreground">{rating}</span>
         </div>
+
+        <NewBadge createdAt={createdAt} className="absolute top-4 left-4" />
+        <ViewCountBadge type="package" id={id} className="absolute bottom-3 left-3" />
       </div>
 
       <div className="p-5">
